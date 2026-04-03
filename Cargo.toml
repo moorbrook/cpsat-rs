@@ -1,0 +1,19 @@
+[package]
+name = "cpsat-rs"
+version = "0.1.0"
+edition = "2021"
+description = "Safe, ergonomic Rust wrapper for Google OR-Tools CP-SAT solver"
+license = "Apache-2.0"
+repository = "https://github.com/rogerhsueh/cpsat-rs"
+keywords = ["optimization", "constraint-programming", "scheduling", "or-tools", "sat"]
+categories = ["algorithms", "mathematics", "science"]
+
+[dependencies]
+prost = "0.13"
+thiserror = "2"
+
+[build-dependencies]
+prost-build = "0.13"
+
+[dev-dependencies]
+# proptest = "1"
