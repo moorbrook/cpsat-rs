@@ -10,4 +10,8 @@ pub enum SolveError {
     /// Failed to decode the solver response protobuf.
     #[error("Failed to decode solver response: {0}")]
     DecodeError(#[from] prost::DecodeError),
+
+    /// Serialized model exceeds the 2 GB limit for i32 length fields.
+    #[error("Serialized model too large ({0} bytes, max 2 GB)")]
+    ModelTooLarge(usize),
 }

@@ -19,18 +19,31 @@ pub trait IntoDomain {
 
 impl IntoDomain for (i64, i64) {
     fn into_domain(self) -> Vec<i64> {
+        assert!(self.0 <= self.1, "Domain ({}, {}) has lb > ub", self.0, self.1);
         vec![self.0, self.1]
     }
 }
 
 impl IntoDomain for std::ops::RangeInclusive<i64> {
     fn into_domain(self) -> Vec<i64> {
+        assert!(
+            self.start() <= self.end(),
+            "Domain {}..={} is empty",
+            self.start(),
+            self.end()
+        );
         vec![*self.start(), *self.end()]
     }
 }
 
 impl IntoDomain for std::ops::Range<i64> {
     fn into_domain(self) -> Vec<i64> {
+        assert!(
+            self.start < self.end,
+            "Domain {}..{} is empty",
+            self.start,
+            self.end
+        );
         vec![self.start, self.end - 1]
     }
 }
@@ -43,12 +56,22 @@ impl IntoDomain for i64 {
 
 impl IntoDomain for Vec<(i64, i64)> {
     fn into_domain(self) -> Vec<i64> {
+        assert!(!self.is_empty(), "Domain interval list must not be empty");
+        for &(a, b) in &self {
+            assert!(a <= b, "Domain interval ({a}, {b}) has lb > ub");
+        }
         self.into_iter().flat_map(|(a, b)| [a, b]).collect()
     }
 }
 
 impl IntoDomain for std::ops::RangeInclusive<i32> {
     fn into_domain(self) -> Vec<i64> {
+        assert!(
+            self.start() <= self.end(),
+            "Domain {}..={} is empty",
+            self.start(),
+            self.end()
+        );
         vec![i64::from(*self.start()), i64::from(*self.end())]
     }
 }
@@ -113,7 +136,9 @@ impl CpModel {
     }
 
     /// Add an interval variable defined by start, size, and end expressions.
-    /// Implicitly enforces start + size == end.
+    ///
+    /// Automatically adds the required `start + size == end` and `size >= 0`
+    /// constraints (the proto does NOT enforce these implicitly).
     pub fn new_interval_var(
         &mut self,
         start: impl Into<LinearExpr>,
@@ -121,22 +146,36 @@ impl CpModel {
         end: impl Into<LinearExpr>,
         name: impl AsRef<str>,
     ) -> IntervalVar {
+        let start_expr = start.into();
+        let size_expr = size.into();
+        let end_expr = end.into();
+
         let idx = self.proto.constraints.len() as i32;
         self.proto.constraints.push(ConstraintProto {
             name: name.as_ref().to_string(),
             enforcement_literal: vec![],
             constraint: Some(constraint_proto::Constraint::Interval(
                 IntervalConstraintProto {
-                    start: Some(start.into().to_proto()),
-                    size: Some(size.into().to_proto()),
-                    end: Some(end.into().to_proto()),
+                    start: Some(start_expr.to_proto()),
+                    size: Some(size_expr.to_proto()),
+                    end: Some(end_expr.to_proto()),
                 },
             )),
         });
+
+        // start + size == end  →  start + size - end == 0
+        self.add_interval_linking(&start_expr, &size_expr, &end_expr, &[]);
+
+        // size >= 0 (only if not already guaranteed by domain)
+        self.add_size_nonneg(&size_expr, &[]);
+
         IntervalVar(idx)
     }
 
     /// Add an optional interval variable, active only when `is_present` is true.
+    ///
+    /// Automatically adds the required `is_present => start + size == end` and
+    /// `is_present => size >= 0` constraints.
     pub fn new_optional_interval_var(
         &mut self,
         start: impl Into<LinearExpr>,
@@ -145,19 +184,93 @@ impl CpModel {
         is_present: BoolVar,
         name: impl AsRef<str>,
     ) -> IntervalVar {
+        let start_expr = start.into();
+        let size_expr = size.into();
+        let end_expr = end.into();
+        let enforcement = vec![is_present.index()];
+
         let idx = self.proto.constraints.len() as i32;
         self.proto.constraints.push(ConstraintProto {
             name: name.as_ref().to_string(),
-            enforcement_literal: vec![is_present.index()],
+            enforcement_literal: enforcement.clone(),
             constraint: Some(constraint_proto::Constraint::Interval(
                 IntervalConstraintProto {
-                    start: Some(start.into().to_proto()),
-                    size: Some(size.into().to_proto()),
-                    end: Some(end.into().to_proto()),
+                    start: Some(start_expr.to_proto()),
+                    size: Some(size_expr.to_proto()),
+                    end: Some(end_expr.to_proto()),
                 },
             )),
         });
+
+        // enforcement => start + size == end
+        self.add_interval_linking(&start_expr, &size_expr, &end_expr, &enforcement);
+
+        // enforcement => size >= 0
+        self.add_size_nonneg(&size_expr, &enforcement);
+
         IntervalVar(idx)
+    }
+
+    /// Add `start + size - end == 0` (optionally enforced).
+    fn add_interval_linking(
+        &mut self,
+        start: &LinearExpr,
+        size: &LinearExpr,
+        end: &LinearExpr,
+        enforcement: &[i32],
+    ) {
+        // start + size - end == 0
+        // Collect all terms: start terms + size terms + (-end terms)
+        let mut vars = Vec::new();
+        let mut coeffs = Vec::new();
+        for &(v, c) in &start.terms { vars.push(v.0); coeffs.push(c); }
+        for &(v, c) in &size.terms { vars.push(v.0); coeffs.push(c); }
+        for &(v, c) in &end.terms { vars.push(v.0); coeffs.push(-c); }
+        let offset = start.constant + size.constant - end.constant;
+
+        self.proto.constraints.push(ConstraintProto {
+            name: String::new(),
+            enforcement_literal: enforcement.to_vec(),
+            constraint: Some(constraint_proto::Constraint::Linear(
+                LinearConstraintProto {
+                    vars,
+                    coeffs,
+                    domain: vec![-offset, -offset], // sum(terms) == -offset
+                },
+            )),
+        });
+    }
+
+    /// Add `size >= 0` (optionally enforced). Only adds the constraint if
+    /// the size expression is not a plain constant >= 0.
+    fn add_size_nonneg(
+        &mut self,
+        size: &LinearExpr,
+        enforcement: &[i32],
+    ) {
+        // If size is a constant >= 0, no constraint needed
+        if size.terms.is_empty() && size.constant >= 0 {
+            return;
+        }
+        let mut vars: Vec<i32> = size.terms.iter().map(|(v, _)| v.0).collect();
+        let mut coeffs: Vec<i64> = size.terms.iter().map(|(_, c)| *c).collect();
+        // size >= 0  →  sum(terms) >= -constant
+        if vars.is_empty() {
+            // Pure constant that's negative — this is invalid
+            vars.push(0); // dummy, will be caught by validation
+            coeffs.push(0);
+        }
+        self.proto.constraints.push(ConstraintProto {
+            name: String::new(),
+            enforcement_literal: enforcement.to_vec(),
+            constraint: Some(constraint_proto::Constraint::Linear(
+                LinearConstraintProto {
+                    vars,
+                    coeffs,
+                    domain: vec![-size.constant, i64::MAX],
+                },
+            )),
+        });
     }
 
     // ───── Constraints ─────
@@ -167,8 +280,8 @@ impl CpModel {
         let expr = bounded.expr;
         // Move constant to the bound side: sum(c*v) + k in [lb, ub]
         // becomes sum(c*v) in [lb - k, ub - k]
-        let adj_lb = if bounded.lb == i64::MIN { i64::MIN } else { bounded.lb - expr.constant };
-        let adj_ub = if bounded.ub == i64::MAX { i64::MAX } else { bounded.ub - expr.constant };
+        let adj_lb = if bounded.lb == i64::MIN { i64::MIN } else { bounded.lb.saturating_sub(expr.constant) };
+        let adj_ub = if bounded.ub == i64::MAX { i64::MAX } else { bounded.ub.saturating_sub(expr.constant) };
 
         self.proto.constraints.push(ConstraintProto {
             name: String::new(),
@@ -218,11 +331,21 @@ impl CpModel {
 
     /// 2D no-overlap: x_intervals[i] and y_intervals[i] define rectangles
     /// that must not overlap.
+    /// # Panics
+    ///
+    /// Panics if `x_intervals` and `y_intervals` have different lengths.
     pub fn add_no_overlap_2d(
         &mut self,
         x_intervals: &[IntervalVar],
         y_intervals: &[IntervalVar],
     ) -> &mut Self {
+        assert_eq!(
+            x_intervals.len(),
+            y_intervals.len(),
+            "add_no_overlap_2d: x_intervals ({}) and y_intervals ({}) must have the same length",
+            x_intervals.len(),
+            y_intervals.len()
+        );
         self.proto.constraints.push(ConstraintProto {
             name: String::new(),
             enforcement_literal: vec![],
@@ -238,12 +361,22 @@ impl CpModel {
 
     /// Cumulative constraint: at any point in time, the sum of demands
     /// of active intervals must not exceed capacity.
+    /// # Panics
+    ///
+    /// Panics if `intervals` and `demands` have different lengths.
     pub fn add_cumulative(
         &mut self,
         intervals: &[IntervalVar],
         demands: &[LinearExpr],
         capacity: impl Into<LinearExpr>,
     ) -> &mut Self {
+        assert_eq!(
+            intervals.len(),
+            demands.len(),
+            "add_cumulative: intervals ({}) and demands ({}) must have the same length",
+            intervals.len(),
+            demands.len()
+        );
         self.proto.constraints.push(ConstraintProto {
             name: String::new(),
             enforcement_literal: vec![],
@@ -279,12 +412,24 @@ impl CpModel {
     }
 
     /// Table constraint: vars must take one of the allowed tuples.
+    /// # Panics
+    ///
+    /// Panics if any tuple has a different length than `vars`.
     pub fn add_table(
         &mut self,
         vars: &[IntVar],
         tuples: &[Vec<i64>],
         negated: bool,
     ) -> &mut Self {
+        for (i, tuple) in tuples.iter().enumerate() {
+            assert_eq!(
+                tuple.len(),
+                vars.len(),
+                "add_table: tuple {i} has {} entries, expected {} (one per variable)",
+                tuple.len(),
+                vars.len()
+            );
+        }
         self.proto.constraints.push(ConstraintProto {
             name: String::new(),
             enforcement_literal: vec![],
@@ -499,7 +644,7 @@ impl CpModel {
         // Maximize f(x) = minimize -f(x)
         self.proto.objective = Some(CpObjectiveProto {
             vars: e.terms.iter().map(|(v, _)| v.0).collect(),
-            coeffs: e.terms.iter().map(|(_, c)| -c).collect(),
+            coeffs: e.terms.iter().map(|(_, c)| c.saturating_neg()).collect(),
             offset: -(e.constant as f64),
             scaling_factor: -1.0,
             domain: vec![],
@@ -529,6 +674,13 @@ impl CpModel {
     }
 
     /// Get a mutable reference to the underlying proto (escape hatch).
+    ///
+    /// # Warning
+    ///
+    /// Modifying the proto directly (reordering, deleting variables or
+    /// constraints) will invalidate all previously returned `IntVar`,
+    /// `BoolVar`, and `IntervalVar` handles. Only use this for adding
+    /// fields the builder doesn't yet support.
     pub fn raw_proto_mut(&mut self) -> &mut CpModelProto {
         &mut self.proto
     }
@@ -563,41 +715,3 @@ impl std::fmt::Display for CpModel {
     }
 }
 
-// Allow `model.add(x <= 10)` syntax via operator overloading on IntVar
-// These produce BoundedLinearExpr which model.add() accepts.
-
-/// Trait for creating bounded expressions from comparisons.
-pub trait Le<Rhs> {
-    /// Create a `<= rhs` bounded expression.
-    fn le(self, rhs: Rhs) -> BoundedLinearExpr;
-}
-
-/// Trait for creating bounded expressions from comparisons.
-pub trait Ge<Rhs> {
-    /// Create a `>= rhs` bounded expression.
-    fn ge(self, rhs: Rhs) -> BoundedLinearExpr;
-}
-
-impl Le<i64> for IntVar {
-    fn le(self, rhs: i64) -> BoundedLinearExpr {
-        LinearExpr::from(self).le(rhs)
-    }
-}
-
-impl Ge<i64> for IntVar {
-    fn ge(self, rhs: i64) -> BoundedLinearExpr {
-        LinearExpr::from(self).ge(rhs)
-    }
-}
-
-impl Le<i64> for LinearExpr {
-    fn le(self, rhs: i64) -> BoundedLinearExpr {
-        self.le(rhs)
-    }
-}
-
-impl Ge<i64> for LinearExpr {
-    fn ge(self, rhs: i64) -> BoundedLinearExpr {
-        self.ge(rhs)
-    }
-}

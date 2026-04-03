@@ -80,23 +80,42 @@ impl SolveResponse {
     /// Get the value of an integer variable in the solution.
     ///
     /// # Panics
-    /// Panics if the variable index is out of bounds or no solution exists.
+    ///
+    /// Panics if the status is not `Optimal` or `Feasible`,
+    /// or if the variable index is out of bounds.
     pub fn value(&self, var: IntVar) -> i64 {
-        self.proto.solution[var.0 as usize]
+        assert!(
+            self.is_feasible(),
+            "Cannot read solution values: status is {:?}",
+            self.status()
+        );
+        assert!(
+            (var.index() as usize) < self.proto.solution.len(),
+            "Variable index {} out of bounds (solution has {} values)",
+            var.index(),
+            self.proto.solution.len()
+        );
+        self.proto.solution[var.index() as usize]
     }
 
     /// Get the value of a Boolean variable in the solution.
     ///
     /// # Panics
-    /// Panics if the variable index is out of bounds or no solution exists.
+    ///
+    /// Panics if the status is not `Optimal` or `Feasible`,
+    /// if the variable is negated, or if the index is out of bounds.
     pub fn bool_value(&self, var: BoolVar) -> bool {
-        let idx = var.index();
-        if idx >= 0 {
-            self.proto.solution[idx as usize] != 0
-        } else {
-            // Negated literal
-            self.proto.solution[(!idx) as usize] == 0
-        }
+        assert!(
+            self.is_feasible(),
+            "Cannot read solution values: status is {:?}",
+            self.status()
+        );
+        assert!(
+            !var.is_negated(),
+            "Cannot read negated BoolVar value directly. \
+             Use the non-negated variable."
+        );
+        self.proto.solution[var.index() as usize] != 0
     }
 
     /// Assumptions sufficient for infeasibility (when status is Infeasible

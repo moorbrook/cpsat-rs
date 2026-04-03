@@ -29,7 +29,18 @@ impl LinearExpr {
     }
 
     /// Create a weighted sum of variables.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `vars` and `coeffs` have different lengths.
     pub fn weighted_sum(vars: &[IntVar], coeffs: &[i64]) -> Self {
+        assert_eq!(
+            vars.len(),
+            coeffs.len(),
+            "weighted_sum: vars ({}) and coeffs ({}) must have the same length",
+            vars.len(),
+            coeffs.len()
+        );
         Self {
             terms: vars.iter().zip(coeffs.iter()).map(|(&v, &c)| (v, c)).collect(),
             constant: 0,
@@ -122,7 +133,7 @@ impl Add for LinearExpr {
     type Output = LinearExpr;
     fn add(mut self, rhs: LinearExpr) -> LinearExpr {
         self.terms.extend(rhs.terms);
-        self.constant += rhs.constant;
+        self.constant = self.constant.saturating_add(rhs.constant);
         self
     }
 }
@@ -138,7 +149,7 @@ impl Add<IntVar> for LinearExpr {
 impl Add<i64> for LinearExpr {
     type Output = LinearExpr;
     fn add(mut self, rhs: i64) -> LinearExpr {
-        self.constant += rhs;
+        self.constant = self.constant.saturating_add(rhs);
         self
     }
 }
@@ -147,9 +158,9 @@ impl Sub for LinearExpr {
     type Output = LinearExpr;
     fn sub(mut self, rhs: LinearExpr) -> LinearExpr {
         for (v, c) in rhs.terms {
-            self.terms.push((v, -c));
+            self.terms.push((v, c.saturating_neg()));
         }
-        self.constant -= rhs.constant;
+        self.constant = self.constant.saturating_sub(rhs.constant);
         self
     }
 }
@@ -165,7 +176,7 @@ impl Sub<IntVar> for LinearExpr {
 impl Sub<i64> for LinearExpr {
     type Output = LinearExpr;
     fn sub(mut self, rhs: i64) -> LinearExpr {
-        self.constant -= rhs;
+        self.constant = self.constant.saturating_sub(rhs);
         self
     }
 }
@@ -174,9 +185,9 @@ impl Neg for LinearExpr {
     type Output = LinearExpr;
     fn neg(mut self) -> LinearExpr {
         for term in &mut self.terms {
-            term.1 = -term.1;
+            term.1 = term.1.saturating_neg();
         }
-        self.constant = -self.constant;
+        self.constant = self.constant.saturating_neg();
         self
     }
 }
@@ -185,9 +196,9 @@ impl Mul<i64> for LinearExpr {
     type Output = LinearExpr;
     fn mul(mut self, rhs: i64) -> LinearExpr {
         for term in &mut self.terms {
-            term.1 *= rhs;
+            term.1 = term.1.saturating_mul(rhs);
         }
-        self.constant *= rhs;
+        self.constant = self.constant.saturating_mul(rhs);
         self
     }
 }
