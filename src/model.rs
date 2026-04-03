@@ -60,6 +60,16 @@ impl IntoDomain for Vec<(i64, i64)> {
         for &(a, b) in &self {
             assert!(a <= b, "Domain interval ({a}, {b}) has lb > ub");
         }
+        // Proto requires sorted, disjoint, non-adjacent intervals:
+        // for all i < n-1: max_i + 1 < min_{i+1}
+        for w in self.windows(2) {
+            assert!(
+                w[0].1 + 1 < w[1].0,
+                "Domain intervals ({}, {}) and ({}, {}) are not sorted/disjoint/non-adjacent \
+                 (require max + 1 < next_min)",
+                w[0].0, w[0].1, w[1].0, w[1].1
+            );
+        }
         self.into_iter().flat_map(|(a, b)| [a, b]).collect()
     }
 }
@@ -225,8 +235,12 @@ impl CpModel {
         let mut coeffs = Vec::new();
         for &(v, c) in &start.terms { vars.push(v.0); coeffs.push(c); }
         for &(v, c) in &size.terms { vars.push(v.0); coeffs.push(c); }
-        for &(v, c) in &end.terms { vars.push(v.0); coeffs.push(-c); }
-        let offset = start.constant + size.constant - end.constant;
+        for &(v, c) in &end.terms {
+            vars.push(v.0);
+            coeffs.push(c.checked_neg().expect("Interval linking: end coefficient overflow on negation"));
+        }
+        let offset = start.constant.saturating_add(size.constant).saturating_sub(end.constant);
+        let neg_offset = offset.saturating_neg();
 
         self.proto.constraints.push(ConstraintProto {
             name: String::new(),
@@ -235,7 +249,7 @@ impl CpModel {
                 LinearConstraintProto {
                     vars,
                     coeffs,
-                    domain: vec![-offset, -offset], // sum(terms) == -offset
+                    domain: vec![neg_offset, neg_offset], // sum(terms) == -offset
                 },
             )),
         });
@@ -252,14 +266,13 @@ impl CpModel {
         if size.terms.is_empty() && size.constant >= 0 {
             return;
         }
-        let mut vars: Vec<i32> = size.terms.iter().map(|(v, _)| v.0).collect();
-        let mut coeffs: Vec<i64> = size.terms.iter().map(|(_, c)| *c).collect();
-        // size >= 0  →  sum(terms) >= -constant
-        if vars.is_empty() {
-            // Pure constant that's negative — this is invalid
-            vars.push(0); // dummy, will be caught by validation
-            coeffs.push(0);
-        }
+        let vars: Vec<i32> = size.terms.iter().map(|(v, _)| v.0).collect();
+        let coeffs: Vec<i64> = size.terms.iter().map(|(_, c)| *c).collect();
+
+        // size >= 0  →  sum(coeffs * vars) + constant >= 0
+        //            →  sum(coeffs * vars) >= -constant
+        // OR-Tools linear proto supports empty vars (pure constant check).
+        let lb = size.constant.checked_neg().unwrap_or(i64::MAX);
         self.proto.constraints.push(ConstraintProto {
             name: String::new(),
             enforcement_literal: enforcement.to_vec(),
@@ -267,7 +280,7 @@ impl CpModel {
                 LinearConstraintProto {
                     vars,
                     coeffs,
-                    domain: vec![-size.constant, i64::MAX],
+                    domain: vec![lb, i64::MAX],
                 },
             )),
         });
@@ -276,12 +289,34 @@ impl CpModel {
     // ───── Constraints ─────
 
     /// Add a bounded linear constraint: lb <= expr <= ub.
+    ///
+    /// # Panics
+    ///
+    /// Panics if adjusting bounds by the expression constant overflows i64.
     pub fn add(&mut self, bounded: BoundedLinearExpr) -> &mut Self {
         let expr = bounded.expr;
         // Move constant to the bound side: sum(c*v) + k in [lb, ub]
         // becomes sum(c*v) in [lb - k, ub - k]
-        let adj_lb = if bounded.lb == i64::MIN { i64::MIN } else { bounded.lb.saturating_sub(expr.constant) };
-        let adj_ub = if bounded.ub == i64::MAX { i64::MAX } else { bounded.ub.saturating_sub(expr.constant) };
+        let adj_lb = if bounded.lb == i64::MIN {
+            i64::MIN
+        } else {
+            bounded.lb.checked_sub(expr.constant).unwrap_or_else(|| {
+                panic!(
+                    "Constraint bound overflow: lb={} - constant={} overflows i64",
+                    bounded.lb, expr.constant
+                )
+            })
+        };
+        let adj_ub = if bounded.ub == i64::MAX {
+            i64::MAX
+        } else {
+            bounded.ub.checked_sub(expr.constant).unwrap_or_else(|| {
+                panic!(
+                    "Constraint bound overflow: ub={} - constant={} overflows i64",
+                    bounded.ub, expr.constant
+                )
+            })
+        };
 
         self.proto.constraints.push(ConstraintProto {
             name: String::new(),
@@ -503,7 +538,12 @@ impl CpModel {
     }
 
     /// At least one literal must be true.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `literals` is empty (would create an always-false constraint).
     pub fn add_bool_or(&mut self, literals: &[BoolVar]) -> &mut Self {
+        assert!(!literals.is_empty(), "add_bool_or: literals must not be empty");
         self.proto.constraints.push(ConstraintProto {
             name: String::new(),
             enforcement_literal: vec![],
@@ -531,7 +571,12 @@ impl CpModel {
     }
 
     /// Exactly one literal must be true.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `literals` is empty (would create an always-false constraint).
     pub fn add_exactly_one(&mut self, literals: &[BoolVar]) -> &mut Self {
+        assert!(!literals.is_empty(), "add_exactly_one: literals must not be empty");
         self.proto.constraints.push(ConstraintProto {
             name: String::new(),
             enforcement_literal: vec![],
@@ -639,12 +684,18 @@ impl CpModel {
     }
 
     /// Maximize the given expression.
+    ///
+    /// # Panics
+    ///
+    /// Panics if any coefficient is `i64::MIN` (cannot be negated).
     pub fn maximize(&mut self, expr: impl Into<LinearExpr>) {
         let e = expr.into();
         // Maximize f(x) = minimize -f(x)
         self.proto.objective = Some(CpObjectiveProto {
             vars: e.terms.iter().map(|(v, _)| v.0).collect(),
-            coeffs: e.terms.iter().map(|(_, c)| c.saturating_neg()).collect(),
+            coeffs: e.terms.iter().map(|(_, c)| c.checked_neg().unwrap_or_else(|| {
+                panic!("maximize: coefficient {c} cannot be negated (i64 overflow)")
+            })).collect(),
             offset: -(e.constant as f64),
             scaling_factor: -1.0,
             domain: vec![],

@@ -80,7 +80,12 @@ impl LinearExpr {
     }
 
     /// Constrain this expression to be in [lb, ub].
+    ///
+    /// # Panics
+    ///
+    /// Panics if `lb > ub`.
     pub fn between(self, lb: i64, ub: i64) -> BoundedLinearExpr {
+        assert!(lb <= ub, "between: lb ({lb}) must be <= ub ({ub})");
         BoundedLinearExpr {
             expr: self,
             lb,
@@ -158,7 +163,7 @@ impl Sub for LinearExpr {
     type Output = LinearExpr;
     fn sub(mut self, rhs: LinearExpr) -> LinearExpr {
         for (v, c) in rhs.terms {
-            self.terms.push((v, c.saturating_neg()));
+            self.terms.push((v, c.checked_neg().expect("LinearExpr coefficient overflow on negation")));
         }
         self.constant = self.constant.saturating_sub(rhs.constant);
         self
@@ -185,7 +190,7 @@ impl Neg for LinearExpr {
     type Output = LinearExpr;
     fn neg(mut self) -> LinearExpr {
         for term in &mut self.terms {
-            term.1 = term.1.saturating_neg();
+            term.1 = term.1.checked_neg().expect("LinearExpr coefficient overflow on negation");
         }
         self.constant = self.constant.saturating_neg();
         self
@@ -196,7 +201,7 @@ impl Mul<i64> for LinearExpr {
     type Output = LinearExpr;
     fn mul(mut self, rhs: i64) -> LinearExpr {
         for term in &mut self.terms {
-            term.1 = term.1.saturating_mul(rhs);
+            term.1 = term.1.checked_mul(rhs).expect("LinearExpr coefficient overflow on multiplication");
         }
         self.constant = self.constant.saturating_mul(rhs);
         self
