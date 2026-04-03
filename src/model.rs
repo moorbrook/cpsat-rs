@@ -289,7 +289,8 @@ impl CpModel {
         // size >= 0  →  sum(coeffs * vars) + constant >= 0
         //            →  sum(coeffs * vars) >= -constant
         // OR-Tools linear proto supports empty vars (pure constant check).
-        let lb = size.constant.checked_neg().unwrap_or(i64::MAX);
+        let lb = size.constant.checked_neg()
+            .expect("Interval size_nonneg: constant overflow on negation");
         self.proto.constraints.push(ConstraintProto {
             name: String::new(),
             enforcement_literal: enforcement.to_vec(),
