@@ -6,7 +6,7 @@ description = "Safe, ergonomic Rust wrapper for Google OR-Tools CP-SAT solver"
 license = "Apache-2.0"
 repository = "https://github.com/moorbrook/cpsat-rs"
 readme = "README.md"
-keywords = ["optimization", "constraint-programming", "scheduling", "or-tools", "sat"]
+keywords = ["optimization", "constraint", "scheduling", "or-tools", "sat"]
 categories = ["algorithms", "mathematics", "science"]
 
 [dependencies]
