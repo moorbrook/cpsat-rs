@@ -105,6 +105,12 @@ pub struct CpModel {
     pub(crate) proto: CpModelProto,
 }
 
+impl Clone for CpModel {
+    fn clone(&self) -> Self {
+        Self { proto: self.proto.clone() }
+    }
+}
+
 impl CpModel {
     /// Create a new empty model.
     pub fn new() -> Self {
@@ -116,6 +122,11 @@ impl CpModel {
     // ───── Variable creation ─────
 
     /// Add an integer variable with the given domain.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the domain is invalid (empty range, lb > ub, or
+    /// non-sorted/non-disjoint intervals for `Vec<(i64, i64)>`).
     pub fn new_int_var(&mut self, domain: impl IntoDomain, name: impl AsRef<str>) -> IntVar {
         let idx = self.proto.variables.len() as i32;
         self.proto.variables.push(IntegerVariableProto {
@@ -149,6 +160,10 @@ impl CpModel {
     ///
     /// Automatically adds the required `start + size == end` and `size >= 0`
     /// constraints (the proto does NOT enforce these implicitly).
+    ///
+    /// # Panics
+    ///
+    /// Panics if coefficient arithmetic overflows i64 during constraint generation.
     pub fn new_interval_var(
         &mut self,
         start: impl Into<LinearExpr>,
@@ -755,6 +770,19 @@ impl CpModel {
         let mut buf = Vec::with_capacity(self.proto.encoded_len());
         self.proto.encode(&mut buf).expect("prost encode cannot fail on valid proto");
         buf
+    }
+
+    /// Deserialize a model from protobuf bytes.
+    ///
+    /// # Errors
+    ///
+    /// Returns `prost::DecodeError` if the bytes are not a valid `CpModelProto`.
+    ///
+    /// Note: variable and constraint handles (`IntVar`, `IntervalVar`) from the
+    /// original model are valid on the deserialized copy (same indices).
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, prost::DecodeError> {
+        let proto = CpModelProto::decode(bytes)?;
+        Ok(Self { proto })
     }
 }
 
