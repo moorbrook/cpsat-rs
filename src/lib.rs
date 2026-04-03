@@ -1,4 +1,4 @@
-//! # cpsat-rs — Safe Rust wrapper for Google OR-Tools CP-SAT solver.
+//! # cpsat-rs — Rust bindings for Google OR-Tools CP-SAT solver.
 //!
 //! Build constraint programming models in safe Rust, solve with the full
 //! power of OR-Tools CP-SAT (CDCL, LP relaxation, LNS, FeasibilityJump).
