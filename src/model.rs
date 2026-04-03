@@ -239,7 +239,9 @@ impl CpModel {
             vars.push(v.0);
             coeffs.push(c.checked_neg().expect("Interval linking: end coefficient overflow on negation"));
         }
-        let offset = start.constant.saturating_add(size.constant).saturating_sub(end.constant);
+        let offset = start.constant.checked_add(size.constant)
+            .and_then(|v| v.checked_sub(end.constant))
+            .expect("Interval linking: constant overflow in start + size - end");
         let neg_offset = offset.saturating_neg();
 
         self.proto.constraints.push(ConstraintProto {
@@ -481,6 +483,9 @@ impl CpModel {
     }
 
     /// Automaton constraint.
+    ///
+    /// Each transition is `(tail_state, head_state, label)` matching
+    /// the OR-Tools Python API convention.
     pub fn add_automaton(
         &mut self,
         vars: &[IntVar],
@@ -490,7 +495,7 @@ impl CpModel {
     ) -> &mut Self {
         let (tails, heads, labels): (Vec<_>, Vec<_>, Vec<_>) = transitions
             .iter()
-            .map(|&(t, l, h)| (t, h, l))
+            .map(|&(tail, head, label)| (tail, head, label))
             .fold((vec![], vec![], vec![]), |(mut t, mut h, mut l), (ti, hi, li)| {
                 t.push(ti); h.push(hi); l.push(li);
                 (t, h, l)

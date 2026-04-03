@@ -1,7 +1,16 @@
 use std::env;
 use std::path::PathBuf;
 
+// Proto files vendored from OR-Tools v9.15.
+// If you have a different version of OR-Tools installed, the protos may not
+// match. OR-Tools maintains backward compatibility within the same major
+// version, but new fields in newer versions will be ignored.
+const ORTOOLS_PROTO_VERSION: &str = "9.15";
+
 fn main() {
+    // Emit the proto version as a cfg for downstream use
+    println!("cargo:rustc-env=CPSAT_RS_ORTOOLS_PROTO_VERSION={ORTOOLS_PROTO_VERSION}");
+
     // 1. Compile protos with prost
     //
     // Requires `protoc` on PATH (install via `brew install protobuf` on macOS,
