@@ -519,12 +519,17 @@ impl CpModel {
     }
 
     /// Element constraint: target == array[index].
+    ///
+    /// # Panics
+    ///
+    /// Panics if `array` is empty.
     pub fn add_element(
         &mut self,
         index: IntVar,
         array: &[IntVar],
         target: IntVar,
     ) -> &mut Self {
+        assert!(!array.is_empty(), "add_element: array must not be empty");
         self.proto.constraints.push(ConstraintProto {
             name: String::new(),
             enforcement_literal: vec![],

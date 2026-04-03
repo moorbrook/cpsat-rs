@@ -57,8 +57,7 @@ fn solve_jsp(inst: &JspInstance, time_limit: f64) -> (i64, bool) {
     model.minimize(makespan);
 
     let params = SatParameters::default()
-        .with_max_time(time_limit)
-        .with_num_workers(8);
+        .with_max_time(time_limit);
 
     let response = CpSolver::solve_with_params(&model, &params).unwrap();
 
