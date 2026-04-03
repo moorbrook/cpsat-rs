@@ -12,11 +12,19 @@ pub struct CpSolver;
 
 impl CpSolver {
     /// Solve a model with default parameters.
+    ///
+    /// # Errors
+    ///
+    /// Returns `SolveError` if the FFI call fails or the response cannot be decoded.
     pub fn solve(model: &CpModel) -> Result<SolveResponse, SolveError> {
         Self::solve_with_params(model, &SatParameters::default())
     }
 
     /// Solve a model with custom parameters.
+    ///
+    /// # Errors
+    ///
+    /// Returns `SolveError` if the FFI call fails or the response cannot be decoded.
     pub fn solve_with_params(
         model: &CpModel,
         params: &SatParameters,

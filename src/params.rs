@@ -35,6 +35,10 @@ impl SatParameters {
     }
 
     /// Serialize to protobuf bytes.
+    ///
+    /// # Panics
+    ///
+    /// Cannot panic in practice — prost encode always succeeds on valid proto.
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut buf = Vec::with_capacity(self.encoded_len());
         self.encode(&mut buf).expect("prost encode cannot fail");

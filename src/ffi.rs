@@ -15,14 +15,15 @@ extern "C" {
         cres: *mut *mut u8,
         cres_len: *mut i32,
     );
+
+    fn free(ptr: *mut std::ffi::c_void);
 }
 
 /// Serialize a model and parameters, call OR-Tools, return response bytes.
 ///
-/// # Safety invariants
-/// - `model_bytes` is a valid serialized `CpModelProto` (guaranteed by prost encode)
-/// - `params_bytes` is a valid serialized `SatParameters` or None
-/// - Response buffer is allocated by C++ and must be freed with libc::free
+/// # Errors
+///
+/// Returns `SolveError::FfiError` if the C API returns a null response buffer.
 pub(crate) fn solve_raw(
     model_bytes: &[u8],
     params_bytes: Option<&[u8]>,
@@ -43,8 +44,8 @@ pub(crate) fn solve_raw(
             model_bytes.len() as i32,
             params_ptr,
             params_len,
-            &mut response_buf,
-            &mut response_len,
+            ptr::addr_of_mut!(response_buf),
+            ptr::addr_of_mut!(response_len),
         );
     }
 
@@ -52,19 +53,14 @@ pub(crate) fn solve_raw(
         return Err(SolveError::FfiError(-1));
     }
 
-    // SAFETY: C++ allocated response_buf, length is response_len.
+    // SAFETY: C++ allocated response_buf with malloc, length is response_len.
     // We copy into a Vec immediately and free the C++ buffer.
     let response = unsafe {
         let slice = std::slice::from_raw_parts(response_buf, response_len as usize);
         let owned = slice.to_vec();
-        libc_free(response_buf as *mut std::ffi::c_void);
+        free(response_buf.cast::<std::ffi::c_void>());
         owned
     };
 
     Ok(response)
-}
-
-extern "C" {
-    #[link_name = "free"]
-    fn libc_free(ptr: *mut std::ffi::c_void);
 }

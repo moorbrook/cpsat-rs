@@ -29,10 +29,10 @@ fn main() {
             );
         });
 
-    let ortools_lib = format!("{}/lib", ortools_prefix);
+    let ortools_lib = format!("{ortools_prefix}/lib");
 
     // 3. Link OR-Tools (uses the C API directly, no C++ shim needed)
-    println!("cargo:rustc-link-search=native={}", ortools_lib);
+    println!("cargo:rustc-link-search=native={ortools_lib}");
     println!("cargo:rustc-link-lib=dylib=ortools");
 
     // Link C++ stdlib (needed because OR-Tools is C++)

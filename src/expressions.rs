@@ -112,7 +112,7 @@ impl From<i64> for LinearExpr {
 
 impl From<i32> for LinearExpr {
     fn from(val: i32) -> Self {
-        Self::constant(val as i64)
+        Self::constant(i64::from(val))
     }
 }
 

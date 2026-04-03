@@ -1,7 +1,7 @@
 //! CpModel builder — the main entry point for constructing optimization models.
 
 use crate::expressions::{BoundedLinearExpr, LinearExpr};
-use crate::proto::{self, constraint_proto, CpModelProto, CpObjectiveProto, ConstraintProto,
+use crate::proto::{constraint_proto, CpModelProto, CpObjectiveProto, ConstraintProto,
     IntegerVariableProto, LinearConstraintProto, IntervalConstraintProto,
     NoOverlapConstraintProto, NoOverlap2DConstraintProto, CumulativeConstraintProto,
     AllDifferentConstraintProto, CircuitConstraintProto, TableConstraintProto,
@@ -49,7 +49,7 @@ impl IntoDomain for Vec<(i64, i64)> {
 
 impl IntoDomain for std::ops::RangeInclusive<i32> {
     fn into_domain(self) -> Vec<i64> {
-        vec![*self.start() as i64, *self.end() as i64]
+        vec![i64::from(*self.start()), i64::from(*self.end())]
     }
 }
 
@@ -250,7 +250,7 @@ impl CpModel {
             constraint: Some(constraint_proto::Constraint::Cumulative(
                 CumulativeConstraintProto {
                     intervals: intervals.iter().map(|iv| iv.0).collect(),
-                    demands: demands.iter().map(|d| d.to_proto()).collect(),
+                    demands: demands.iter().map(LinearExpr::to_proto).collect(),
                     capacity: Some(capacity.into().to_proto()),
                 },
             )),
@@ -534,6 +534,10 @@ impl CpModel {
     }
 
     /// Serialize the model to protobuf bytes.
+    ///
+    /// # Panics
+    ///
+    /// Cannot panic in practice — prost encode always succeeds on valid proto.
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut buf = Vec::with_capacity(self.proto.encoded_len());
         self.proto.encode(&mut buf).expect("prost encode cannot fail on valid proto");
