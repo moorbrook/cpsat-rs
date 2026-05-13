@@ -41,6 +41,7 @@ fn ft06_job_shop() {
 
     let mut model = CpModel::new();
 
+    #[allow(dead_code)] // `interval` is held to keep the IntervalVar alive in the model
     struct OpVar {
         start: IntVar,
         end: IntVar,
