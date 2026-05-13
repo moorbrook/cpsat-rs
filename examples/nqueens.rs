@@ -39,8 +39,8 @@ fn main() {
 
     if response.is_feasible() {
         println!("{n}-Queens solution:");
-        for i in 0..n as usize {
-            let col = response.value(queens[i]);
+        for &q in queens.iter().take(n as usize) {
+            let col = response.value(q);
             let mut row = vec!['.'; n as usize];
             row[col as usize] = 'Q';
             println!("  {}", row.iter().collect::<String>());
