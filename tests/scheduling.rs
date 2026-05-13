@@ -58,7 +58,11 @@ fn ft06_job_shop() {
             let e = model.new_int_var(0..=horizon, format!("e_{}", name));
             let iv = model.new_interval_var(s, d, e, &name);
             machine_intervals[machine].push(iv);
-            job_ops.push(OpVar { start: s, end: e, interval: iv });
+            job_ops.push(OpVar {
+                start: s,
+                end: e,
+                interval: iv,
+            });
         }
         ops.push(job_ops);
     }
@@ -90,11 +94,7 @@ fn ft06_job_shop() {
 
     let response = CpSolver::solve_with_params(&model, &params).unwrap();
     assert!(response.is_optimal(), "FT06 should be proved optimal");
-    assert_eq!(
-        response.value(makespan),
-        55,
-        "FT06 optimal makespan is 55"
-    );
+    assert_eq!(response.value(makespan), 55, "FT06 optimal makespan is 55");
     eprintln!(
         "FT06: makespan={}, time={:.3}s",
         response.value(makespan),

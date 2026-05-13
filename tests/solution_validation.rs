@@ -28,7 +28,11 @@ fn interval_linking_is_enforced() {
     let dv = 10_i64;
 
     // THE KEY CHECK: end must equal start + size
-    assert_eq!(ev, sv + dv, "Interval linking violated: end({ev}) != start({sv}) + size({dv})");
+    assert_eq!(
+        ev,
+        sv + dv,
+        "Interval linking violated: end({ev}) != start({sv}) + size({dv})"
+    );
     assert_eq!(sv, 0, "Start should be 0 (minimizing end)");
     assert_eq!(ev, 10, "End should be 10");
 }
@@ -137,8 +141,14 @@ fn precedences_respected_in_solution() {
     assert_eq!(e11v - s11v, 5, "j1o1 duration mismatch");
 
     // 2. Job precedences
-    assert!(e00v <= s01v, "j0 precedence violated: e00={e00v} > s01={s01v}");
-    assert!(e10v <= s11v, "j1 precedence violated: e10={e10v} > s11={s11v}");
+    assert!(
+        e00v <= s01v,
+        "j0 precedence violated: e00={e00v} > s01={s01v}"
+    );
+    assert!(
+        e10v <= s11v,
+        "j1 precedence violated: e10={e10v} > s11={s11v}"
+    );
 
     // 3. Machine no-overlap
     assert!(
@@ -181,7 +191,11 @@ fn without_no_overlap_tasks_can_overlap() {
     assert!(resp.is_optimal());
 
     // Without no-overlap, both tasks start at 0, makespan = 5
-    assert_eq!(resp.value(makespan), 5, "Without no-overlap, makespan should be 5 (tasks overlap)");
+    assert_eq!(
+        resp.value(makespan),
+        5,
+        "Without no-overlap, makespan should be 5 (tasks overlap)"
+    );
     assert_eq!(resp.value(s0), 0);
     assert_eq!(resp.value(s1), 0);
 }
@@ -208,7 +222,11 @@ fn optional_interval_respects_presence() {
     assert!(resp.is_optimal());
 
     // When not present, end can be 0 (linking constraint not enforced)
-    assert_eq!(resp.value(e), 0, "When not present, end should be 0 (unconstrained)");
+    assert_eq!(
+        resp.value(e),
+        0,
+        "When not present, end should be 0 (unconstrained)"
+    );
     assert!(!resp.bool_value(present));
 }
 
@@ -235,5 +253,9 @@ fn interval_with_variable_size() {
     let ev = resp.value(e);
 
     assert_eq!(szv, 0, "Minimum size should be 0");
-    assert_eq!(ev, sv + szv, "Linking: end({ev}) != start({sv}) + size({szv})");
+    assert_eq!(
+        ev,
+        sv + szv,
+        "Linking: end({ev}) != start({sv}) + size({szv})"
+    );
 }

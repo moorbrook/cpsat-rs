@@ -68,7 +68,9 @@ fn main() {
 
     // Link protobuf if available separately (needed on some platforms)
     let protobuf_lib = format!("{ortools_prefix}/lib");
-    if PathBuf::from(&protobuf_lib).join("libprotobuf.dylib").exists()
+    if PathBuf::from(&protobuf_lib)
+        .join("libprotobuf.dylib")
+        .exists()
         || PathBuf::from(&protobuf_lib).join("libprotobuf.so").exists()
     {
         println!("cargo:rustc-link-lib=dylib=protobuf");
