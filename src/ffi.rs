@@ -78,7 +78,11 @@ pub(crate) fn solve_raw(
     // We copy into a Vec immediately and free the buffer.
     // A response_len of 0 is valid (empty protobuf message).
     let response = unsafe {
-        let len = if response_len >= 0 { response_len as usize } else { 0 };
+        let len = if response_len >= 0 {
+            response_len as usize
+        } else {
+            0
+        };
         let owned = if len > 0 {
             let slice = std::slice::from_raw_parts(response_buf, len);
             slice.to_vec()

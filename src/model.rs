@@ -1,12 +1,14 @@
 //! CpModel builder — the main entry point for constructing optimization models.
 
 use crate::expressions::{BoundedLinearExpr, LinearExpr};
-use crate::proto::{constraint_proto, CpModelProto, CpObjectiveProto, ConstraintProto,
-    IntegerVariableProto, LinearConstraintProto, IntervalConstraintProto,
-    NoOverlapConstraintProto, NoOverlap2DConstraintProto, CumulativeConstraintProto,
-    AllDifferentConstraintProto, CircuitConstraintProto, TableConstraintProto,
-    AutomatonConstraintProto, ElementConstraintProto, BoolArgumentProto,
-    LinearExpressionProto, PartialVariableAssignment, LinearArgumentProto};
+use crate::proto::{
+    constraint_proto, AllDifferentConstraintProto, AutomatonConstraintProto, BoolArgumentProto,
+    CircuitConstraintProto, ConstraintProto, CpModelProto, CpObjectiveProto,
+    CumulativeConstraintProto, ElementConstraintProto, IntegerVariableProto,
+    IntervalConstraintProto, LinearArgumentProto, LinearConstraintProto, LinearExpressionProto,
+    NoOverlap2DConstraintProto, NoOverlapConstraintProto, PartialVariableAssignment,
+    TableConstraintProto,
+};
 use crate::vars::{BoolVar, IntVar, IntervalVar};
 use prost::Message;
 
@@ -19,7 +21,12 @@ pub trait IntoDomain {
 
 impl IntoDomain for (i64, i64) {
     fn into_domain(self) -> Vec<i64> {
-        assert!(self.0 <= self.1, "Domain ({}, {}) has lb > ub", self.0, self.1);
+        assert!(
+            self.0 <= self.1,
+            "Domain ({}, {}) has lb > ub",
+            self.0,
+            self.1
+        );
         vec![self.0, self.1]
     }
 }
@@ -67,7 +74,10 @@ impl IntoDomain for Vec<(i64, i64)> {
                 w[0].1 + 1 < w[1].0,
                 "Domain intervals ({}, {}) and ({}, {}) are not sorted/disjoint/non-adjacent \
                  (require max + 1 < next_min)",
-                w[0].0, w[0].1, w[1].0, w[1].1
+                w[0].0,
+                w[0].1,
+                w[1].0,
+                w[1].1
             );
         }
         self.into_iter().flat_map(|(a, b)| [a, b]).collect()
@@ -107,7 +117,9 @@ pub struct CpModel {
 
 impl Clone for CpModel {
     fn clone(&self) -> Self {
-        Self { proto: self.proto.clone() }
+        Self {
+            proto: self.proto.clone(),
+        }
     }
 }
 
@@ -248,13 +260,24 @@ impl CpModel {
         // Collect all terms: start terms + size terms + (-end terms)
         let mut vars = Vec::new();
         let mut coeffs = Vec::new();
-        for &(v, c) in &start.terms { vars.push(v.0); coeffs.push(c); }
-        for &(v, c) in &size.terms { vars.push(v.0); coeffs.push(c); }
+        for &(v, c) in &start.terms {
+            vars.push(v.0);
+            coeffs.push(c);
+        }
+        for &(v, c) in &size.terms {
+            vars.push(v.0);
+            coeffs.push(c);
+        }
         for &(v, c) in &end.terms {
             vars.push(v.0);
-            coeffs.push(c.checked_neg().expect("Interval linking: end coefficient overflow on negation"));
+            coeffs.push(
+                c.checked_neg()
+                    .expect("Interval linking: end coefficient overflow on negation"),
+            );
         }
-        let offset = start.constant.checked_add(size.constant)
+        let offset = start
+            .constant
+            .checked_add(size.constant)
             .and_then(|v| v.checked_sub(end.constant))
             .expect("Interval linking: constant overflow in start + size - end");
         let neg_offset = offset.saturating_neg();
@@ -274,11 +297,7 @@ impl CpModel {
 
     /// Add `size >= 0` (optionally enforced). Only adds the constraint if
     /// the size expression is not a plain constant >= 0.
-    fn add_size_nonneg(
-        &mut self,
-        size: &LinearExpr,
-        enforcement: &[i32],
-    ) {
+    fn add_size_nonneg(&mut self, size: &LinearExpr, enforcement: &[i32]) {
         // If size is a constant >= 0, no constraint needed
         if size.terms.is_empty() && size.constant >= 0 {
             return;
@@ -289,7 +308,9 @@ impl CpModel {
         // size >= 0  →  sum(coeffs * vars) + constant >= 0
         //            →  sum(coeffs * vars) >= -constant
         // OR-Tools linear proto supports empty vars (pure constant check).
-        let lb = size.constant.checked_neg()
+        let lb = size
+            .constant
+            .checked_neg()
             .expect("Interval size_nonneg: constant overflow on negation");
         self.proto.constraints.push(ConstraintProto {
             name: String::new(),
@@ -357,11 +378,14 @@ impl CpModel {
             enforcement_literal: vec![],
             constraint: Some(constraint_proto::Constraint::AllDiff(
                 AllDifferentConstraintProto {
-                    exprs: vars.iter().map(|v| LinearExpressionProto {
-                        vars: vec![v.0],
-                        coeffs: vec![1],
-                        offset: 0,
-                    }).collect(),
+                    exprs: vars
+                        .iter()
+                        .map(|v| LinearExpressionProto {
+                            vars: vec![v.0],
+                            coeffs: vec![1],
+                            offset: 0,
+                        })
+                        .collect(),
                 },
             )),
         });
@@ -447,18 +471,25 @@ impl CpModel {
     /// Circuit constraint: find a Hamiltonian circuit.
     /// Each arc is (tail_node, head_node, literal).
     pub fn add_circuit(&mut self, arcs: &[(i32, i32, BoolVar)]) -> &mut Self {
-        let (tails, heads, literals): (Vec<_>, Vec<_>, Vec<_>) = arcs
-            .iter()
-            .map(|&(t, h, l)| (t, h, l.index()))
-            .fold((vec![], vec![], vec![]), |(mut t, mut h, mut l), (ti, hi, li)| {
-                t.push(ti); h.push(hi); l.push(li);
-                (t, h, l)
-            });
+        let (tails, heads, literals): (Vec<_>, Vec<_>, Vec<_>) =
+            arcs.iter().map(|&(t, h, l)| (t, h, l.index())).fold(
+                (vec![], vec![], vec![]),
+                |(mut t, mut h, mut l), (ti, hi, li)| {
+                    t.push(ti);
+                    h.push(hi);
+                    l.push(li);
+                    (t, h, l)
+                },
+            );
         self.proto.constraints.push(ConstraintProto {
             name: String::new(),
             enforcement_literal: vec![],
             constraint: Some(constraint_proto::Constraint::Circuit(
-                CircuitConstraintProto { tails, heads, literals },
+                CircuitConstraintProto {
+                    tails,
+                    heads,
+                    literals,
+                },
             )),
         });
         self
@@ -468,12 +499,7 @@ impl CpModel {
     /// # Panics
     ///
     /// Panics if any tuple has a different length than `vars`.
-    pub fn add_table(
-        &mut self,
-        vars: &[IntVar],
-        tuples: &[Vec<i64>],
-        negated: bool,
-    ) -> &mut Self {
+    pub fn add_table(&mut self, vars: &[IntVar], tuples: &[Vec<i64>], negated: bool) -> &mut Self {
         for (i, tuple) in tuples.iter().enumerate() {
             assert_eq!(
                 tuple.len(),
@@ -486,14 +512,12 @@ impl CpModel {
         self.proto.constraints.push(ConstraintProto {
             name: String::new(),
             enforcement_literal: vec![],
-            constraint: Some(constraint_proto::Constraint::Table(
-                TableConstraintProto {
-                    vars: vars.iter().map(|v| v.0).collect(),
-                    values: tuples.iter().flatten().copied().collect(),
-                    negated,
-                    exprs: vec![],
-                },
-            )),
+            constraint: Some(constraint_proto::Constraint::Table(TableConstraintProto {
+                vars: vars.iter().map(|v| v.0).collect(),
+                values: tuples.iter().flatten().copied().collect(),
+                negated,
+                exprs: vec![],
+            })),
         });
         self
     }
@@ -512,10 +536,15 @@ impl CpModel {
         let (tails, heads, labels): (Vec<_>, Vec<_>, Vec<_>) = transitions
             .iter()
             .map(|&(tail, head, label)| (tail, head, label))
-            .fold((vec![], vec![], vec![]), |(mut t, mut h, mut l), (ti, hi, li)| {
-                t.push(ti); h.push(hi); l.push(li);
-                (t, h, l)
-            });
+            .fold(
+                (vec![], vec![], vec![]),
+                |(mut t, mut h, mut l), (ti, hi, li)| {
+                    t.push(ti);
+                    h.push(hi);
+                    l.push(li);
+                    (t, h, l)
+                },
+            );
         self.proto.constraints.push(ConstraintProto {
             name: String::new(),
             enforcement_literal: vec![],
@@ -539,12 +568,7 @@ impl CpModel {
     /// # Panics
     ///
     /// Panics if `array` is empty.
-    pub fn add_element(
-        &mut self,
-        index: IntVar,
-        array: &[IntVar],
-        target: IntVar,
-    ) -> &mut Self {
+    pub fn add_element(&mut self, index: IntVar, array: &[IntVar], target: IntVar) -> &mut Self {
         assert!(!array.is_empty(), "add_element: array must not be empty");
         self.proto.constraints.push(ConstraintProto {
             name: String::new(),
@@ -569,15 +593,16 @@ impl CpModel {
     ///
     /// Panics if `literals` is empty (would create an always-false constraint).
     pub fn add_bool_or(&mut self, literals: &[BoolVar]) -> &mut Self {
-        assert!(!literals.is_empty(), "add_bool_or: literals must not be empty");
+        assert!(
+            !literals.is_empty(),
+            "add_bool_or: literals must not be empty"
+        );
         self.proto.constraints.push(ConstraintProto {
             name: String::new(),
             enforcement_literal: vec![],
-            constraint: Some(constraint_proto::Constraint::BoolOr(
-                BoolArgumentProto {
-                    literals: literals.iter().map(|l| l.index()).collect(),
-                },
-            )),
+            constraint: Some(constraint_proto::Constraint::BoolOr(BoolArgumentProto {
+                literals: literals.iter().map(|l| l.index()).collect(),
+            })),
         });
         self
     }
@@ -587,11 +612,9 @@ impl CpModel {
         self.proto.constraints.push(ConstraintProto {
             name: String::new(),
             enforcement_literal: vec![],
-            constraint: Some(constraint_proto::Constraint::BoolAnd(
-                BoolArgumentProto {
-                    literals: literals.iter().map(|l| l.index()).collect(),
-                },
-            )),
+            constraint: Some(constraint_proto::Constraint::BoolAnd(BoolArgumentProto {
+                literals: literals.iter().map(|l| l.index()).collect(),
+            })),
         });
         self
     }
@@ -602,7 +625,10 @@ impl CpModel {
     ///
     /// Panics if `literals` is empty (would create an always-false constraint).
     pub fn add_exactly_one(&mut self, literals: &[BoolVar]) -> &mut Self {
-        assert!(!literals.is_empty(), "add_exactly_one: literals must not be empty");
+        assert!(
+            !literals.is_empty(),
+            "add_exactly_one: literals must not be empty"
+        );
         self.proto.constraints.push(ConstraintProto {
             name: String::new(),
             enforcement_literal: vec![],
@@ -620,11 +646,9 @@ impl CpModel {
         self.proto.constraints.push(ConstraintProto {
             name: String::new(),
             enforcement_literal: vec![],
-            constraint: Some(constraint_proto::Constraint::AtMostOne(
-                BoolArgumentProto {
-                    literals: literals.iter().map(|l| l.index()).collect(),
-                },
-            )),
+            constraint: Some(constraint_proto::Constraint::AtMostOne(BoolArgumentProto {
+                literals: literals.iter().map(|l| l.index()).collect(),
+            })),
         });
         self
     }
@@ -635,11 +659,9 @@ impl CpModel {
         self.proto.constraints.push(ConstraintProto {
             name: String::new(),
             enforcement_literal: vec![a.index()],
-            constraint: Some(constraint_proto::Constraint::BoolAnd(
-                BoolArgumentProto {
-                    literals: vec![b.index()],
-                },
-            )),
+            constraint: Some(constraint_proto::Constraint::BoolAnd(BoolArgumentProto {
+                literals: vec![b.index()],
+            })),
         });
         self
     }
@@ -649,20 +671,21 @@ impl CpModel {
         self.proto.constraints.push(ConstraintProto {
             name: String::new(),
             enforcement_literal: vec![],
-            constraint: Some(constraint_proto::Constraint::LinMax(
-                LinearArgumentProto {
-                    target: Some(LinearExpressionProto {
-                        vars: vec![target.0],
-                        coeffs: vec![1],
-                        offset: 0,
-                    }),
-                    exprs: vars.iter().map(|v| LinearExpressionProto {
+            constraint: Some(constraint_proto::Constraint::LinMax(LinearArgumentProto {
+                target: Some(LinearExpressionProto {
+                    vars: vec![target.0],
+                    coeffs: vec![1],
+                    offset: 0,
+                }),
+                exprs: vars
+                    .iter()
+                    .map(|v| LinearExpressionProto {
                         vars: vec![v.0],
                         coeffs: vec![1],
                         offset: 0,
-                    }).collect(),
-                },
-            )),
+                    })
+                    .collect(),
+            })),
         });
         self
     }
@@ -673,20 +696,21 @@ impl CpModel {
         self.proto.constraints.push(ConstraintProto {
             name: String::new(),
             enforcement_literal: vec![],
-            constraint: Some(constraint_proto::Constraint::LinMax(
-                LinearArgumentProto {
-                    target: Some(LinearExpressionProto {
-                        vars: vec![target.0],
-                        coeffs: vec![-1],
-                        offset: 0,
-                    }),
-                    exprs: vars.iter().map(|v| LinearExpressionProto {
+            constraint: Some(constraint_proto::Constraint::LinMax(LinearArgumentProto {
+                target: Some(LinearExpressionProto {
+                    vars: vec![target.0],
+                    coeffs: vec![-1],
+                    offset: 0,
+                }),
+                exprs: vars
+                    .iter()
+                    .map(|v| LinearExpressionProto {
                         vars: vec![v.0],
                         coeffs: vec![-1],
                         offset: 0,
-                    }).collect(),
-                },
-            )),
+                    })
+                    .collect(),
+            })),
         });
         self
     }
@@ -719,9 +743,15 @@ impl CpModel {
         // Maximize f(x) = minimize -f(x)
         self.proto.objective = Some(CpObjectiveProto {
             vars: e.terms.iter().map(|(v, _)| v.0).collect(),
-            coeffs: e.terms.iter().map(|(_, c)| c.checked_neg().unwrap_or_else(|| {
-                panic!("maximize: coefficient {c} cannot be negated (i64 overflow)")
-            })).collect(),
+            coeffs: e
+                .terms
+                .iter()
+                .map(|(_, c)| {
+                    c.checked_neg().unwrap_or_else(|| {
+                        panic!("maximize: coefficient {c} cannot be negated (i64 overflow)")
+                    })
+                })
+                .collect(),
             offset: -(e.constant as f64),
             scaling_factor: -1.0,
             domain: vec![],
@@ -736,9 +766,13 @@ impl CpModel {
 
     /// Provide a solution hint for a variable.
     pub fn add_hint(&mut self, var: IntVar, value: i64) {
-        let hint = self.proto.solution_hint.get_or_insert_with(|| {
-            PartialVariableAssignment { vars: vec![], values: vec![] }
-        });
+        let hint = self
+            .proto
+            .solution_hint
+            .get_or_insert_with(|| PartialVariableAssignment {
+                vars: vec![],
+                values: vec![],
+            });
         hint.vars.push(var.0);
         hint.values.push(value);
     }
@@ -769,7 +803,9 @@ impl CpModel {
     /// Cannot panic in practice — prost encode always succeeds on valid proto.
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut buf = Vec::with_capacity(self.proto.encoded_len());
-        self.proto.encode(&mut buf).expect("prost encode cannot fail on valid proto");
+        self.proto
+            .encode(&mut buf)
+            .expect("prost encode cannot fail on valid proto");
         buf
     }
 
@@ -800,8 +836,11 @@ impl std::fmt::Display for CpModel {
             "CpModel({} vars, {} constraints{})",
             self.proto.variables.len(),
             self.proto.constraints.len(),
-            if self.proto.objective.is_some() { ", has objective" } else { "" },
+            if self.proto.objective.is_some() {
+                ", has objective"
+            } else {
+                ""
+            },
         )
     }
 }
-

@@ -36,7 +36,11 @@ fn main() {
             let e = model.new_int_var(0..=horizon, format!("e_j{j}o{op}"));
             let iv = model.new_interval_var(s, d, e, format!("iv_j{j}o{op}"));
             machine_intervals[machine].push(iv);
-            job_ops.push(OpVar { start: s, end: e, _interval: iv });
+            job_ops.push(OpVar {
+                start: s,
+                end: e,
+                _interval: iv,
+            });
         }
         ops.push(job_ops);
     }
@@ -57,7 +61,10 @@ fn main() {
 
     // Makespan = max of all job completion times.
     let makespan = model.new_int_var(0..=horizon, "makespan");
-    let last_ends: Vec<IntVar> = ops.iter().filter_map(|j| j.last().map(|op| op.end)).collect();
+    let last_ends: Vec<IntVar> = ops
+        .iter()
+        .filter_map(|j| j.last().map(|op| op.end))
+        .collect();
     model.add_max_equality(makespan, &last_ends);
     model.minimize(makespan);
 
@@ -74,7 +81,10 @@ fn main() {
             println!("Optimal makespan: {}", response.value(makespan));
         }
         CpSolverStatus::Feasible => {
-            println!("Best makespan found: {} (not proved optimal)", response.value(makespan));
+            println!(
+                "Best makespan found: {} (not proved optimal)",
+                response.value(makespan)
+            );
         }
         _ => {
             println!("No solution found (status: {:?})", response.status());

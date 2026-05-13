@@ -42,7 +42,11 @@ impl LinearExpr {
             coeffs.len()
         );
         Self {
-            terms: vars.iter().zip(coeffs.iter()).map(|(&v, &c)| (v, c)).collect(),
+            terms: vars
+                .iter()
+                .zip(coeffs.iter())
+                .map(|(&v, &c)| (v, c))
+                .collect(),
             constant: 0,
         }
     }
@@ -86,11 +90,7 @@ impl LinearExpr {
     /// Panics if `lb > ub`.
     pub fn between(self, lb: i64, ub: i64) -> BoundedLinearExpr {
         assert!(lb <= ub, "between: lb ({lb}) must be <= ub ({ub})");
-        BoundedLinearExpr {
-            expr: self,
-            lb,
-            ub,
-        }
+        BoundedLinearExpr { expr: self, lb, ub }
     }
 
     /// Convert to the proto representation.
@@ -138,7 +138,9 @@ impl Add for LinearExpr {
     type Output = LinearExpr;
     fn add(mut self, rhs: LinearExpr) -> LinearExpr {
         self.terms.extend(rhs.terms);
-        self.constant = self.constant.checked_add(rhs.constant)
+        self.constant = self
+            .constant
+            .checked_add(rhs.constant)
             .expect("LinearExpr constant overflow on addition");
         self
     }
@@ -155,7 +157,9 @@ impl Add<IntVar> for LinearExpr {
 impl Add<i64> for LinearExpr {
     type Output = LinearExpr;
     fn add(mut self, rhs: i64) -> LinearExpr {
-        self.constant = self.constant.checked_add(rhs)
+        self.constant = self
+            .constant
+            .checked_add(rhs)
             .expect("LinearExpr constant overflow on addition");
         self
     }
@@ -165,9 +169,15 @@ impl Sub for LinearExpr {
     type Output = LinearExpr;
     fn sub(mut self, rhs: LinearExpr) -> LinearExpr {
         for (v, c) in rhs.terms {
-            self.terms.push((v, c.checked_neg().expect("LinearExpr coefficient overflow on negation")));
+            self.terms.push((
+                v,
+                c.checked_neg()
+                    .expect("LinearExpr coefficient overflow on negation"),
+            ));
         }
-        self.constant = self.constant.checked_sub(rhs.constant)
+        self.constant = self
+            .constant
+            .checked_sub(rhs.constant)
             .expect("LinearExpr constant overflow on subtraction");
         self
     }
@@ -184,7 +194,9 @@ impl Sub<IntVar> for LinearExpr {
 impl Sub<i64> for LinearExpr {
     type Output = LinearExpr;
     fn sub(mut self, rhs: i64) -> LinearExpr {
-        self.constant = self.constant.checked_sub(rhs)
+        self.constant = self
+            .constant
+            .checked_sub(rhs)
             .expect("LinearExpr constant overflow on subtraction");
         self
     }
@@ -194,9 +206,14 @@ impl Neg for LinearExpr {
     type Output = LinearExpr;
     fn neg(mut self) -> LinearExpr {
         for term in &mut self.terms {
-            term.1 = term.1.checked_neg().expect("LinearExpr coefficient overflow on negation");
+            term.1 = term
+                .1
+                .checked_neg()
+                .expect("LinearExpr coefficient overflow on negation");
         }
-        self.constant = self.constant.checked_neg()
+        self.constant = self
+            .constant
+            .checked_neg()
             .expect("LinearExpr constant overflow on negation");
         self
     }
@@ -206,9 +223,14 @@ impl Mul<i64> for LinearExpr {
     type Output = LinearExpr;
     fn mul(mut self, rhs: i64) -> LinearExpr {
         for term in &mut self.terms {
-            term.1 = term.1.checked_mul(rhs).expect("LinearExpr coefficient overflow on multiplication");
+            term.1 = term
+                .1
+                .checked_mul(rhs)
+                .expect("LinearExpr coefficient overflow on multiplication");
         }
-        self.constant = self.constant.checked_mul(rhs)
+        self.constant = self
+            .constant
+            .checked_mul(rhs)
             .expect("LinearExpr constant overflow on multiplication");
         self
     }
