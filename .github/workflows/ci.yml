@@ -29,15 +29,39 @@ jobs:
     uses: moorbrook/ci-workflows/.github/workflows/rust-lint.yml@5a86afac0c5b3cffb844449302f25268a14f6693
     with:
       setup-commands: |
+        set -e
         sudo apt-get update -qq
         sudo apt-get install -y --no-install-recommends protobuf-compiler
+        # Pre-built OR-Tools for Ubuntu 24.04 (ubuntu-latest as of 2026).
+        # Pinned to the same version cpsat-rs vendors protos from.
+        OR_TOOLS_VERSION=9.15
+        OR_TOOLS_BUILD=v${OR_TOOLS_VERSION}
+        ARCHIVE=or-tools_amd64_ubuntu-24.04_cpp_${OR_TOOLS_BUILD}.tar.gz
+        curl -fsSLo /tmp/${ARCHIVE} \
+          https://github.com/google/or-tools/releases/download/${OR_TOOLS_BUILD}/${ARCHIVE}
+        sudo mkdir -p /opt/or-tools
+        sudo tar -xzf /tmp/${ARCHIVE} -C /opt/or-tools --strip-components=1
+        echo "ORTOOLS_PREFIX=/opt/or-tools" >>"$GITHUB_ENV"
+        echo "LD_LIBRARY_PATH=/opt/or-tools/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >>"$GITHUB_ENV"
 
   test:
     uses: moorbrook/ci-workflows/.github/workflows/rust-test.yml@5a86afac0c5b3cffb844449302f25268a14f6693
     with:
       setup-commands: |
+        set -e
         sudo apt-get update -qq
         sudo apt-get install -y --no-install-recommends protobuf-compiler
+        # Pre-built OR-Tools for Ubuntu 24.04 (ubuntu-latest as of 2026).
+        # Pinned to the same version cpsat-rs vendors protos from.
+        OR_TOOLS_VERSION=9.15
+        OR_TOOLS_BUILD=v${OR_TOOLS_VERSION}
+        ARCHIVE=or-tools_amd64_ubuntu-24.04_cpp_${OR_TOOLS_BUILD}.tar.gz
+        curl -fsSLo /tmp/${ARCHIVE} \
+          https://github.com/google/or-tools/releases/download/${OR_TOOLS_BUILD}/${ARCHIVE}
+        sudo mkdir -p /opt/or-tools
+        sudo tar -xzf /tmp/${ARCHIVE} -C /opt/or-tools --strip-components=1
+        echo "ORTOOLS_PREFIX=/opt/or-tools" >>"$GITHUB_ENV"
+        echo "LD_LIBRARY_PATH=/opt/or-tools/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >>"$GITHUB_ENV"
 
   # Heavy: only on main-push. Builds the Windows-msvc target via cargo-xwin
   # so we don't burn 2x Windows-runner quota on every PR.
@@ -46,5 +70,17 @@ jobs:
     uses: moorbrook/ci-workflows/.github/workflows/rust-windows-cross.yml@5a86afac0c5b3cffb844449302f25268a14f6693
     with:
       setup-commands: |
+        set -e
         sudo apt-get update -qq
         sudo apt-get install -y --no-install-recommends protobuf-compiler
+        # Pre-built OR-Tools for Ubuntu 24.04 (ubuntu-latest as of 2026).
+        # Pinned to the same version cpsat-rs vendors protos from.
+        OR_TOOLS_VERSION=9.15
+        OR_TOOLS_BUILD=v${OR_TOOLS_VERSION}
+        ARCHIVE=or-tools_amd64_ubuntu-24.04_cpp_${OR_TOOLS_BUILD}.tar.gz
+        curl -fsSLo /tmp/${ARCHIVE} \
+          https://github.com/google/or-tools/releases/download/${OR_TOOLS_BUILD}/${ARCHIVE}
+        sudo mkdir -p /opt/or-tools
+        sudo tar -xzf /tmp/${ARCHIVE} -C /opt/or-tools --strip-components=1
+        echo "ORTOOLS_PREFIX=/opt/or-tools" >>"$GITHUB_ENV"
+        echo "LD_LIBRARY_PATH=/opt/or-tools/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >>"$GITHUB_ENV"
