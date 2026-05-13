@@ -3,6 +3,7 @@
 
 use cpsat_rs::prelude::*;
 
+#[allow(dead_code)] // `optimal` is reference data tracked alongside each instance
 struct JspInstance {
     name: &'static str,
     num_machines: usize,
