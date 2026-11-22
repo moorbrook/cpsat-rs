@@ -1,20 +1,23 @@
 [package]
 name = "cpsat-rs"
-version = "0.1.2"
-edition = "2021"
+version = "0.2.0"
+edition = "2024"
+rust-version = "1.88"
 description = "Rust bindings for Google OR-Tools CP-SAT solver"
 license = "Apache-2.0"
 repository = "https://github.com/moorbrook/cpsat-rs"
+documentation = "https://docs.rs/cpsat-rs"
 readme = "README.md"
 keywords = ["optimization", "constraint", "scheduling", "or-tools", "sat"]
 categories = ["algorithms", "mathematics", "science"]
+exclude = [".claude/**", ".DS_Store", "rust-toolchain.toml"]
 
 [dependencies]
-prost = "0.13"
+prost = "0.14"
 thiserror = "2"
 
 [build-dependencies]
-prost-build = "0.13"
+prost-build = "0.14"
 
 [dev-dependencies]
 proptest = "1"

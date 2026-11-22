@@ -6,7 +6,7 @@
 use crate::error::SolveError;
 use std::ptr;
 
-extern "C" {
+unsafe extern "C" {
     fn SolveCpModelWithParameters(
         creq: *const u8,
         creq_len: i32,
@@ -20,13 +20,13 @@ extern "C" {
 // OR-Tools C API allocates response with malloc (confirmed in cp_solver_c.cc).
 // We use libc::free to match. On Windows with multiple CRTs this could mismatch,
 // but OR-Tools' own C API examples use free() for deallocation.
-extern "C" {
+unsafe extern "C" {
     #[cfg(not(target_os = "windows"))]
     fn free(ptr: *mut std::ffi::c_void);
 }
 
 #[cfg(target_os = "windows")]
-extern "C" {
+unsafe extern "C" {
     // On Windows, use _aligned_free or the CRT-matched free.
     // For now we use the same free — OR-Tools links the same CRT.
     fn free(ptr: *mut std::ffi::c_void);
