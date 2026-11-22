@@ -2,11 +2,6 @@ name: CI
 
 # Caller for moorbrook/ci-workflows reusable workflows.
 # Pinned to a specific SHA; bump to roll the upgrade.
-#
-# `prost-build` runs in build.rs and needs `protoc` at compile time
-# (NOT libortools — that's a runtime concern for binaries linking
-# against this crate). Lint/test/xwin each get the apt-install via
-# the reusable workflows' `setup-commands` hook.
 
 on:
   push:
@@ -23,10 +18,10 @@ concurrency:
 
 jobs:
   fmt:
-    uses: moorbrook/ci-workflows/.github/workflows/rust-fmt.yml@5a86afac0c5b3cffb844449302f25268a14f6693
+    uses: moorbrook/ci-workflows/.github/workflows/rust-fmt.yml@4f966b6b71f2376c826fa56a303fa1b6f91d5a89
 
   lint:
-    uses: moorbrook/ci-workflows/.github/workflows/rust-lint.yml@5a86afac0c5b3cffb844449302f25268a14f6693
+    uses: moorbrook/ci-workflows/.github/workflows/rust-lint.yml@4f966b6b71f2376c826fa56a303fa1b6f91d5a89
     with:
       setup-commands: |
         set -e
@@ -46,7 +41,7 @@ jobs:
         echo "LD_LIBRARY_PATH=/opt/or-tools/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >>"$GITHUB_ENV"
 
   test:
-    uses: moorbrook/ci-workflows/.github/workflows/rust-test.yml@5a86afac0c5b3cffb844449302f25268a14f6693
+    uses: moorbrook/ci-workflows/.github/workflows/rust-test.yml@4f966b6b71f2376c826fa56a303fa1b6f91d5a89
     with:
       setup-commands: |
         set -e
@@ -71,7 +66,7 @@ jobs:
   # downstream consumers materialize.
   windows-cross:
     if: false
-    uses: moorbrook/ci-workflows/.github/workflows/rust-windows-cross.yml@5a86afac0c5b3cffb844449302f25268a14f6693
+    uses: moorbrook/ci-workflows/.github/workflows/rust-windows-cross.yml@4f966b6b71f2376c826fa56a303fa1b6f91d5a89
     with:
       setup-commands: |
         set -e
