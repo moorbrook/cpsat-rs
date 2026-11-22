@@ -1,14 +1,9 @@
-//! JSP benchmark suite: verify cpsat-rs produces correct optimal solutions
-//! on standard job shop scheduling instances from the literature.
-
 use cpsat_rs::prelude::*;
 
-#[allow(dead_code)] // `optimal` is reference data tracked alongside each instance
 struct JspInstance {
     name: &'static str,
     num_machines: usize,
     optimal: i64,
-    /// Each job is a list of (machine, `processing_time`) operations.
     jobs: Vec<Vec<(usize, i64)>>,
 }
 
@@ -42,21 +37,18 @@ fn solve_jsp(inst: &JspInstance, time_limit: f64) -> (i64, bool) {
         ops.push(job_ops);
     }
 
-    // Job precedences
     for job_ops in &ops {
         for w in job_ops.windows(2) {
             model.add((LinearExpr::from(w[0].end) - LinearExpr::from(w[1].start)).le(0));
         }
     }
 
-    // Machine no-overlap
     for intervals in &machine_intervals {
         if intervals.len() > 1 {
             model.add_no_overlap(intervals);
         }
     }
 
-    // Makespan
     let makespan = model.new_int_var(0..=horizon, "makespan");
     let last_ends: Vec<IntVar> = ops
         .iter()
@@ -78,8 +70,6 @@ fn solve_jsp(inst: &JspInstance, time_limit: f64) -> (i64, bool) {
     }
 }
 
-// ───── FT06: 6x6, optimal = 55 ─────
-
 #[test]
 fn ft06_optimal() {
     let inst = JspInstance {
@@ -96,12 +86,14 @@ fn ft06_optimal() {
         ],
     };
     let (ms, proved) = solve_jsp(&inst, 30.0);
-    assert_eq!(ms, 55, "FT06 should find optimal 55");
+    assert_eq!(
+        ms, inst.optimal,
+        "FT06 should find optimal {}",
+        inst.optimal
+    );
     assert!(proved, "FT06 should be proved optimal");
     eprintln!("  FT06: makespan={ms}, proved={proved}");
 }
-
-// ───── FT10: 10x10, optimal = 930 ─────
 
 const FT10_JOBS: [[(usize, i64); 10]; 10] = [
     [
@@ -227,7 +219,7 @@ const FT10_JOBS: [[(usize, i64); 10]; 10] = [
 ];
 
 #[test]
-fn ft10_optimal() {
+fn ft10_finds_near_optimal() {
     let inst = JspInstance {
         name: "ft10",
         num_machines: 10,
@@ -235,15 +227,20 @@ fn ft10_optimal() {
         jobs: FT10_JOBS.iter().map(|row| row.to_vec()).collect(),
     };
     let (ms, proved) = solve_jsp(&inst, 60.0);
-    // OR-Tools finds 930 reliably but may need >60s for proof on some runs
-    assert!(ms <= 940, "FT10 should find <= 940, got {ms}");
+    assert!(
+        ms <= inst.optimal + 10,
+        "FT10 should find <= {}, got {ms}",
+        inst.optimal + 10
+    );
     eprintln!("  FT10: makespan={ms}, proved={proved}");
     if proved {
-        assert_eq!(ms, 930, "If proved, FT10 optimal must be 930");
+        assert_eq!(
+            ms, inst.optimal,
+            "If proved, FT10 optimal must be {}",
+            inst.optimal
+        );
     }
 }
-
-// ───── LA01: 10x5, optimal = 666 ─────
 
 #[test]
 fn la01_optimal() {
@@ -265,12 +262,14 @@ fn la01_optimal() {
         ],
     };
     let (ms, proved) = solve_jsp(&inst, 30.0);
-    assert_eq!(ms, 666, "LA01 should find optimal 666");
+    assert_eq!(
+        ms, inst.optimal,
+        "LA01 should find optimal {}",
+        inst.optimal
+    );
     assert!(proved, "LA01 should be proved optimal");
     eprintln!("  LA01: makespan={ms}, proved={proved}");
 }
-
-// ───── ABZ5: 10x10, optimal = 1234 ─────
 
 const ABZ5_JOBS: [[(usize, i64); 10]; 10] = [
     [
@@ -337,61 +336,61 @@ const ABZ5_JOBS: [[(usize, i64); 10]; 10] = [
         (1, 99),
         (4, 81),
         (5, 64),
-        (8, 66),
+        (6, 66),
+        (8, 80),
         (2, 80),
-        (7, 80),
-        (0, 69),
+        (7, 69),
         (9, 62),
         (3, 79),
-        (6, 88),
+        (0, 88),
     ],
     [
         (7, 50),
-        (1, 84),
-        (4, 58),
-        (3, 72),
-        (2, 65),
-        (0, 80),
-        (8, 50),
-        (6, 89),
-        (9, 57),
-        (5, 89),
+        (1, 86),
+        (4, 97),
+        (3, 96),
+        (0, 95),
+        (8, 97),
+        (2, 66),
+        (5, 99),
+        (6, 52),
+        (9, 71),
     ],
     [
-        (3, 57),
-        (0, 89),
-        (5, 62),
-        (4, 85),
-        (2, 65),
-        (8, 93),
-        (7, 64),
-        (1, 85),
-        (6, 85),
-        (9, 74),
+        (4, 98),
+        (6, 73),
+        (3, 82),
+        (2, 51),
+        (1, 71),
+        (5, 94),
+        (7, 85),
+        (0, 62),
+        (8, 95),
+        (9, 79),
     ],
     [
-        (1, 90),
-        (3, 67),
-        (5, 77),
         (0, 94),
-        (7, 58),
-        (2, 93),
-        (8, 68),
-        (4, 57),
-        (9, 95),
-        (6, 56),
+        (6, 71),
+        (3, 81),
+        (7, 85),
+        (1, 66),
+        (2, 90),
+        (4, 76),
+        (5, 58),
+        (8, 93),
+        (9, 97),
     ],
     [
-        (3, 84),
-        (2, 78),
-        (0, 81),
-        (7, 82),
-        (1, 61),
-        (9, 91),
-        (4, 83),
-        (6, 90),
-        (5, 63),
-        (8, 63),
+        (3, 50),
+        (0, 59),
+        (1, 82),
+        (8, 67),
+        (7, 56),
+        (9, 96),
+        (6, 58),
+        (4, 81),
+        (5, 59),
+        (2, 96),
     ],
 ];
 
@@ -404,6 +403,17 @@ fn abz5_finds_near_optimal() {
         jobs: ABZ5_JOBS.iter().map(|row| row.to_vec()).collect(),
     };
     let (ms, proved) = solve_jsp(&inst, 60.0);
-    assert!(ms <= 1250, "ABZ5 should find <= 1250, got {ms}");
+    assert!(
+        ms <= inst.optimal + 16,
+        "ABZ5 should find <= {}, got {ms}",
+        inst.optimal + 16
+    );
+    if proved {
+        assert_eq!(
+            ms, inst.optimal,
+            "If proved, ABZ5 optimal must be {}",
+            inst.optimal
+        );
+    }
     eprintln!("  ABZ5: makespan={ms}, proved={proved}");
 }

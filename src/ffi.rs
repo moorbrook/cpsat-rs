@@ -1,13 +1,8 @@
-//! The single unsafe FFI bridge to OR-Tools CP-SAT.
-//!
-//! Uses the official C API from `ortools/sat/c_api/cp_solver_c.h`.
-//! This module contains the ONLY unsafe code in the crate.
-
 use crate::error::SolveError;
 use std::ptr;
 
-// OR-Tools C API allocates response with malloc (confirmed in cp_solver_c.cc).
-// We pair it with C `free` on every exit path via `MallocGuard`.
+// OR-Tools C API (`ortools/sat/c_api/cp_solver_c.cc`) allocates `cres` with C `malloc`.
+// Pair every call with `free` via `MallocGuard` on all exit paths.
 unsafe extern "C" {
     fn SolveCpModelWithParameters(
         creq: *const u8,
@@ -36,23 +31,14 @@ impl Drop for MallocGuard {
     }
 }
 
-/// Safely convert a `usize` to `i32`, returning an error if it overflows.
 fn usize_to_i32(val: usize) -> Result<i32, SolveError> {
     i32::try_from(val).map_err(|_| SolveError::ModelTooLarge(val))
 }
 
-/// Convert a C response buffer length to `usize`, rejecting negative values.
 fn response_len_to_usize(response_len: i32) -> Result<usize, SolveError> {
     usize::try_from(response_len).map_err(|_| SolveError::FfiError(response_len))
 }
 
-/// Serialize a model and parameters, call OR-Tools, return response bytes.
-///
-/// # Errors
-///
-/// Returns `SolveError::FfiError` if the C API returns a null response buffer
-/// or a negative response length.
-/// Returns `SolveError::ModelTooLarge` if the serialized model exceeds 2 GB.
 pub(crate) fn solve_raw(
     model_bytes: &[u8],
     params_bytes: Option<&[u8]>,

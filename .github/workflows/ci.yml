@@ -1,8 +1,5 @@
 name: CI
 
-# Caller for moorbrook/ci-workflows reusable workflows.
-# Pinned to a specific SHA; bump to roll the upgrade.
-
 on:
   push:
     branches: [main]
@@ -60,10 +57,6 @@ jobs:
         echo "ORTOOLS_PREFIX=/opt/or-tools" >>"$GITHUB_ENV"
         echo "LD_LIBRARY_PATH=/opt/or-tools/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >>"$GITHUB_ENV"
 
-  # Disabled: OR-Tools ships separate Linux / Windows tarballs and cross-
-  # compiling libortools from Linux to MSVC is non-trivial. cpsat-rs's primary
-  # target is Linux/macOS optimization workloads — re-enable if Windows
-  # downstream consumers materialize.
   windows-cross:
     if: false
     uses: moorbrook/ci-workflows/.github/workflows/rust-windows-cross.yml@4f966b6b71f2376c826fa56a303fa1b6f91d5a89

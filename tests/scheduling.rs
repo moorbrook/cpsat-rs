@@ -16,23 +16,19 @@ fn two_tasks_one_machine() {
     model.add_no_overlap(&[iv0, iv1]);
 
     let makespan = model.new_int_var(0..=100, "makespan");
-    model.add(LinearExpr::from(e0).le(100)); // dummy to use e0 bound
     model.add_max_equality(makespan, &[e0, e1]);
     model.minimize(makespan);
 
     let response = CpSolver::solve(&model).unwrap();
     assert!(response.is_optimal());
-    assert_eq!(response.value(makespan), 8); // 3 + 5
+    assert_eq!(response.value(makespan), 8);
 }
 
-/// FT06: Fisher-Thompson 6x6, optimal makespan = 55.
 #[test]
 fn ft06_job_shop() {
-    #[allow(dead_code)] // `interval` is held to keep the IntervalVar alive in the model
     struct OpVar {
         start: IntVar,
         end: IntVar,
-        interval: IntervalVar,
     }
 
     let jobs: Vec<Vec<(usize, i64)>> = vec![
@@ -60,31 +56,23 @@ fn ft06_job_shop() {
             let e = model.new_int_var(0..=horizon, format!("e_{name}"));
             let iv = model.new_interval_var(s, d, e, &name);
             machine_intervals[machine].push(iv);
-            job_ops.push(OpVar {
-                start: s,
-                end: e,
-                interval: iv,
-            });
+            job_ops.push(OpVar { start: s, end: e });
         }
         ops.push(job_ops);
     }
 
-    // Job precedences
     for job_ops in &ops {
         for w in job_ops.windows(2) {
-            // pred.end <= succ.start
             model.add((LinearExpr::from(w[0].end) - LinearExpr::from(w[1].start)).le(0));
         }
     }
 
-    // Machine no-overlap
     for intervals in &machine_intervals {
         if intervals.len() > 1 {
             model.add_no_overlap(intervals);
         }
     }
 
-    // Makespan = max(all end times)
     let makespan = model.new_int_var(0..=horizon, "makespan");
     let all_ends: Vec<IntVar> = ops
         .iter()

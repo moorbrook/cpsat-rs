@@ -67,8 +67,8 @@ impl IntoDomain for Vec<(i64, i64)> {
         for &(a, b) in &self {
             assert!(a <= b, "Domain interval ({a}, {b}) has lb > ub");
         }
-        // Proto requires sorted, disjoint, non-adjacent intervals:
-        // for all i < n-1: max_i + 1 < min_{i+1}
+        // OR-Tools CpModelProto requires sorted, disjoint, non-adjacent intervals:
+        // for all i < n-1: max_i + 1 < min_{i+1}.
         for w in self.windows(2) {
             assert!(
                 w[0].1.checked_add(1).is_some_and(|next| next < w[1].0),
@@ -132,8 +132,6 @@ impl CpModel {
         i32::try_from(self.proto.constraints.len())
             .expect("CpModel constraint count exceeds i32::MAX")
     }
-
-    // ───── Variable creation ─────
 
     /// Add an integer variable with the given domain.
     ///
@@ -212,10 +210,8 @@ impl CpModel {
             )),
         });
 
-        // start + size == end  →  start + size - end == 0
         self.add_interval_linking(&start_expr, &size_expr, &end_expr, &[]);
 
-        // size >= 0 (only if not already guaranteed by domain)
         self.add_size_nonneg(&size_expr, &[]);
 
         IntervalVar(idx)
@@ -256,16 +252,13 @@ impl CpModel {
             )),
         });
 
-        // enforcement => start + size == end
         self.add_interval_linking(&start_expr, &size_expr, &end_expr, &enforcement);
 
-        // enforcement => size >= 0
         self.add_size_nonneg(&size_expr, &enforcement);
 
         IntervalVar(idx)
     }
 
-    /// Add `start + size - end == 0` (optionally enforced).
     fn add_interval_linking(
         &mut self,
         start: &LinearExpr,
@@ -273,8 +266,6 @@ impl CpModel {
         end: &LinearExpr,
         enforcement: &[i32],
     ) {
-        // start + size - end == 0
-        // Collect all terms: start terms + size terms + (-end terms)
         let mut vars = Vec::new();
         let mut coeffs = Vec::new();
         for &(v, c) in &start.terms {
@@ -308,25 +299,19 @@ impl CpModel {
                 LinearConstraintProto {
                     vars,
                     coeffs,
-                    domain: vec![neg_offset, neg_offset], // sum(terms) == -offset
+                    domain: vec![neg_offset, neg_offset],
                 },
             )),
         });
     }
 
-    /// Add `size >= 0` (optionally enforced). Only adds the constraint if
-    /// the size expression is not a plain constant >= 0.
     fn add_size_nonneg(&mut self, size: &LinearExpr, enforcement: &[i32]) {
-        // If size is a constant >= 0, no constraint needed
         if size.terms.is_empty() && size.constant >= 0 {
             return;
         }
         let vars: Vec<i32> = size.terms.iter().map(|(v, _)| v.0).collect();
         let coeffs: Vec<i64> = size.terms.iter().map(|(_, c)| *c).collect();
 
-        // size >= 0  →  sum(coeffs * vars) + constant >= 0
-        //            →  sum(coeffs * vars) >= -constant
-        // OR-Tools linear proto supports empty vars (pure constant check).
         let lb = size
             .constant
             .checked_neg()
@@ -344,8 +329,6 @@ impl CpModel {
         });
     }
 
-    // ───── Constraints ─────
-
     /// Add a bounded linear constraint: `lb <= expr <= ub`.
     ///
     /// # Panics
@@ -353,8 +336,6 @@ impl CpModel {
     /// Panics if adjusting bounds by the expression constant overflows `i64`.
     pub fn add(&mut self, bounded: BoundedLinearExpr) -> &mut Self {
         let expr = bounded.expr;
-        // Move constant to the bound side: sum(c*v) + k in [lb, ub]
-        // becomes sum(c*v) in [lb - k, ub - k]
         let adjusted_lower = if bounded.lb == i64::MIN {
             i64::MIN
         } else {
@@ -671,7 +652,6 @@ impl CpModel {
 
     /// Implication: if `a` is true then `b` must be true.
     pub fn add_implication(&mut self, a: BoolVar, b: BoolVar) -> &mut Self {
-        // Encoded as: a => b  ≡  ¬a ∨ b
         self.proto.constraints.push(ConstraintProto {
             name: String::new(),
             enforcement_literal: vec![a.index()],
@@ -708,7 +688,6 @@ impl CpModel {
 
     /// Min constraint: `target == min(vars)`.
     pub fn add_min_equality(&mut self, target: IntVar, vars: &[IntVar]) -> &mut Self {
-        // min(vars) = -max(-vars)
         self.proto.constraints.push(ConstraintProto {
             name: String::new(),
             enforcement_literal: vec![],
@@ -730,8 +709,6 @@ impl CpModel {
         });
         self
     }
-
-    // ───── Objective ─────
 
     /// Minimize the given expression.
     #[expect(
@@ -764,7 +741,6 @@ impl CpModel {
     )]
     pub fn maximize(&mut self, expr: impl Into<LinearExpr>) {
         let e = expr.into();
-        // Maximize f(x) = minimize -f(x)
         self.proto.objective = Some(CpObjectiveProto {
             vars: e.terms.iter().map(|(v, _)| v.0).collect(),
             coeffs: e
@@ -786,8 +762,6 @@ impl CpModel {
         });
     }
 
-    // ───── Hints ─────
-
     /// Provide a solution hint for a variable.
     pub fn add_hint(&mut self, var: IntVar, value: i64) {
         let hint = self
@@ -800,8 +774,6 @@ impl CpModel {
         hint.vars.push(var.0);
         hint.values.push(value);
     }
-
-    // ───── Serialization ─────
 
     /// Get a reference to the underlying proto.
     pub fn to_proto(&self) -> &CpModelProto {

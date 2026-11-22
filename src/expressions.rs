@@ -93,7 +93,6 @@ impl LinearExpr {
         BoundedLinearExpr { expr: self, lb, ub }
     }
 
-    /// Convert to the proto representation.
     pub(crate) fn to_proto(&self) -> crate::proto::LinearExpressionProto {
         crate::proto::LinearExpressionProto {
             vars: self.terms.iter().map(|(v, _)| v.0).collect(),
@@ -102,8 +101,6 @@ impl LinearExpr {
         }
     }
 }
-
-// --- From conversions ---
 
 impl From<IntVar> for LinearExpr {
     fn from(v: IntVar) -> Self {
@@ -131,8 +128,6 @@ impl From<i32> for LinearExpr {
         Self::constant(i64::from(val))
     }
 }
-
-// --- Arithmetic operators ---
 
 impl Add for LinearExpr {
     type Output = LinearExpr;
@@ -236,7 +231,6 @@ impl Mul<i64> for LinearExpr {
     }
 }
 
-// coeff * IntVar → LinearExpr
 impl Mul<IntVar> for i64 {
     type Output = LinearExpr;
     fn mul(self, rhs: IntVar) -> LinearExpr {
@@ -247,7 +241,6 @@ impl Mul<IntVar> for i64 {
     }
 }
 
-// IntVar + IntVar → LinearExpr
 impl Add for IntVar {
     type Output = LinearExpr;
     fn add(self, rhs: IntVar) -> LinearExpr {
@@ -258,7 +251,6 @@ impl Add for IntVar {
     }
 }
 
-// IntVar + i64 → LinearExpr
 impl Add<i64> for IntVar {
     type Output = LinearExpr;
     fn add(self, rhs: i64) -> LinearExpr {
@@ -269,7 +261,6 @@ impl Add<i64> for IntVar {
     }
 }
 
-// IntVar - IntVar → LinearExpr
 impl Sub for IntVar {
     type Output = LinearExpr;
     fn sub(self, rhs: IntVar) -> LinearExpr {
@@ -280,7 +271,6 @@ impl Sub for IntVar {
     }
 }
 
-// IntVar * i64 → LinearExpr
 impl Mul<i64> for IntVar {
     type Output = LinearExpr;
     fn mul(self, rhs: i64) -> LinearExpr {
@@ -299,9 +289,6 @@ pub struct BoundedLinearExpr {
     pub(crate) lb: i64,
     pub(crate) ub: i64,
 }
-
-// Convenience: IntVar <= i64 → BoundedLinearExpr
-// We can't impl PartialOrd for foreign types, so use free functions.
 
 /// Create a bounded expression: var <= ub.
 pub fn leq(var: impl Into<LinearExpr>, ub: i64) -> BoundedLinearExpr {

@@ -1,17 +1,11 @@
-//! Job Shop Scheduling: minimize makespan for the classic FT06 benchmark.
-//!
-//! FT06 (Fisher & Thompson, 1963): 6 jobs, 6 machines, optimal makespan = 55.
-
 use cpsat_rs::prelude::*;
 
 struct OpVar {
     start: IntVar,
     end: IntVar,
-    _interval: IntervalVar,
 }
 
 fn main() {
-    // Each job is a list of (machine, processing_time) operations.
     let jobs: Vec<Vec<(usize, i64)>> = vec![
         vec![(2, 1), (0, 3), (1, 6), (3, 7), (5, 3), (4, 6)],
         vec![(1, 8), (2, 5), (4, 10), (5, 10), (0, 10), (3, 4)],
@@ -25,7 +19,6 @@ fn main() {
 
     let mut model = CpModel::new();
 
-    // Create interval variables for each operation.
     let mut ops: Vec<Vec<OpVar>> = Vec::new();
     let mut machine_intervals: Vec<Vec<IntervalVar>> = vec![vec![]; n_machines];
 
@@ -37,30 +30,23 @@ fn main() {
             let e = model.new_int_var(0..=horizon, format!("e_j{j}o{op}"));
             let iv = model.new_interval_var(s, d, e, format!("iv_j{j}o{op}"));
             machine_intervals[machine].push(iv);
-            job_ops.push(OpVar {
-                start: s,
-                end: e,
-                _interval: iv,
-            });
+            job_ops.push(OpVar { start: s, end: e });
         }
         ops.push(job_ops);
     }
 
-    // Job precedences: each operation must finish before the next starts.
     for job_ops in &ops {
         for w in job_ops.windows(2) {
             model.add((LinearExpr::from(w[0].end) - LinearExpr::from(w[1].start)).le(0));
         }
     }
 
-    // Machine no-overlap: operations on the same machine cannot overlap.
     for intervals in &machine_intervals {
         if intervals.len() > 1 {
             model.add_no_overlap(intervals);
         }
     }
 
-    // Makespan = max of all job completion times.
     let makespan = model.new_int_var(0..=horizon, "makespan");
     let last_ends: Vec<IntVar> = ops
         .iter()
@@ -69,7 +55,6 @@ fn main() {
     model.add_max_equality(makespan, &last_ends);
     model.minimize(makespan);
 
-    // Solve with 8 workers, 30s time limit.
     let params = SatParameters::default()
         .with_max_time(30.0)
         .with_num_workers(8)
@@ -93,7 +78,6 @@ fn main() {
         }
     }
 
-    // Print schedule.
     println!("\nSchedule:");
     for (j, job_ops) in ops.iter().enumerate() {
         print!("  Job {j}: ");

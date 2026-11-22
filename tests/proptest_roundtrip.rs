@@ -1,14 +1,7 @@
-//! Property-based tests for cpsat-rs.
-//!
-//! Tests invariants that should hold for ALL inputs, not just specific examples.
-
 use cpsat_rs::prelude::*;
 use proptest::prelude::*;
 
-// ───── Model serialization roundtrip ─────
-
 proptest! {
-    /// A model with N variables survives serialize/deserialize roundtrip.
     #[test]
     fn model_roundtrip(n in 1usize..20, lb in -100i64..0, ub in 0i64..100) {
         let mut model = CpModel::new();
@@ -28,7 +21,6 @@ proptest! {
         }
     }
 
-    /// Model with constraints survives roundtrip.
     #[test]
     fn model_with_constraints_roundtrip(n in 2usize..8, bound in 10i64..100) {
         let mut model = CpModel::new();
@@ -49,10 +41,7 @@ proptest! {
     }
 }
 
-// ───── Domain validation ─────
-
 proptest! {
-    /// Valid domains always produce valid IntVar handles.
     #[test]
     fn valid_domain_produces_valid_handle(lb in -1000i64..0, ub in 0i64..1000) {
         let mut model = CpModel::new();
@@ -60,7 +49,6 @@ proptest! {
         prop_assert!(var.index() >= 0);
     }
 
-    /// Solve a trivial minimize with random bounds: result == lb.
     #[test]
     fn trivial_minimize_returns_lb(lb in 0i64..50, ub in 50i64..100) {
         let mut model = CpModel::new();
@@ -72,7 +60,6 @@ proptest! {
         prop_assert_eq!(resp.value(x), lb);
     }
 
-    /// Solve a trivial maximize with random bounds: result == ub.
     #[test]
     fn trivial_maximize_returns_ub(lb in 0i64..50, ub in 50i64..100) {
         let mut model = CpModel::new();
@@ -85,10 +72,7 @@ proptest! {
     }
 }
 
-// ───── BoolVar invariants ─────
-
 proptest! {
-    /// Double negation of a BoolVar returns the original index.
     #[test]
     fn boolvar_double_negation(idx in 0i32..1000) {
         let mut model = CpModel::new();
@@ -97,7 +81,6 @@ proptest! {
         prop_assert_eq!(double_neg.index(), b.index());
     }
 
-    /// Negated BoolVar has negative index, original has non-negative.
     #[test]
     fn boolvar_negation_sign(_idx in 0i32..100) {
         let mut model = CpModel::new();
@@ -109,10 +92,7 @@ proptest! {
     }
 }
 
-// ───── Interval linking ─────
-
 proptest! {
-    /// Interval with constant size: minimizing end gives start=0, end=size.
     #[test]
     fn interval_minimize_end(dur in 1i64..50) {
         let mut model = CpModel::new();
