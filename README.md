@@ -6,7 +6,7 @@ Provides a Rust builder API for constructing CP-SAT models, with solving delegat
 
 ## How it works
 
-Model construction happens in Rust using prost-generated protobuf types. The model is serialized, passed to OR-Tools' C API (`SolveCpModelWithParameters`), and the response is deserialized back. There are two `unsafe` blocks in `src/ffi.rs` for this boundary.
+Model construction happens in Rust using prost-generated protobuf types. The model is serialized, passed to OR-Tools' C API (`SolveCpModelWithParameters`), and the response is deserialized back. The `src/ffi.rs` boundary contains three narrow `unsafe` operations (FFI solver call, slice read of the returned buffer, and `free` in an RAII drop guard).
 
 ```
 Rust builder API → CpModelProto (prost) → serialize → C FFI → OR-Tools → deserialize → response
@@ -67,7 +67,7 @@ cargo run --example jobshop      # FT06 job shop scheduling (optimal=55)
 ## Limitations
 
 - Requires OR-Tools system library (not pure Rust)
-- FFI boundary: two `unsafe` blocks for serialize/deserialize + free
+- FFI boundary in `src/ffi.rs`: three narrow `unsafe` blocks (C solver call, response slice copy, RAII `free`)
 - No solve cancellation (blocking FFI call)
 - Variable handles are plain indices with no model provenance check
 - Proto files vendored from OR-Tools v9.15

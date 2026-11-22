@@ -6,6 +6,8 @@
 use crate::error::SolveError;
 use std::ptr;
 
+// OR-Tools C API allocates response with malloc (confirmed in cp_solver_c.cc).
+// We pair it with C `free` on every exit path via `MallocGuard`.
 unsafe extern "C" {
     fn SolveCpModelWithParameters(
         creq: *const u8,
@@ -15,21 +17,23 @@ unsafe extern "C" {
         cres: *mut *mut u8,
         cres_len: *mut i32,
     );
-}
-
-// OR-Tools C API allocates response with malloc (confirmed in cp_solver_c.cc).
-// We use libc::free to match. On Windows with multiple CRTs this could mismatch,
-// but OR-Tools' own C API examples use free() for deallocation.
-unsafe extern "C" {
-    #[cfg(not(target_os = "windows"))]
     fn free(ptr: *mut std::ffi::c_void);
 }
 
-#[cfg(target_os = "windows")]
-unsafe extern "C" {
-    // On Windows, use _aligned_free or the CRT-matched free.
-    // For now we use the same free — OR-Tools links the same CRT.
-    fn free(ptr: *mut std::ffi::c_void);
+struct MallocGuard(*mut u8);
+
+impl Drop for MallocGuard {
+    fn drop(&mut self) {
+        if !self.0.is_null() {
+            // SAFETY: `self.0` is non-null (checked above), was returned by
+            // `SolveCpModelWithParameters` which allocates the output buffer via
+            // C `malloc` (verified in OR-Tools `ortools/sat/c_api/cp_solver_c.cc`),
+            // and `MallocGuard` uniquely owns it with no surviving aliases.
+            unsafe {
+                free(self.0.cast::<std::ffi::c_void>());
+            }
+        }
+    }
 }
 
 /// Safely convert a `usize` to `i32`, returning an error if it overflows.
@@ -37,11 +41,17 @@ fn usize_to_i32(val: usize) -> Result<i32, SolveError> {
     i32::try_from(val).map_err(|_| SolveError::ModelTooLarge(val))
 }
 
+/// Convert a C response buffer length to `usize`, rejecting negative values.
+fn response_len_to_usize(response_len: i32) -> Result<usize, SolveError> {
+    usize::try_from(response_len).map_err(|_| SolveError::FfiError(response_len))
+}
+
 /// Serialize a model and parameters, call OR-Tools, return response bytes.
 ///
 /// # Errors
 ///
-/// Returns `SolveError::FfiError` if the C API returns a null response buffer.
+/// Returns `SolveError::FfiError` if the C API returns a null response buffer
+/// or a negative response length.
 /// Returns `SolveError::ModelTooLarge` if the serialized model exceeds 2 GB.
 pub(crate) fn solve_raw(
     model_bytes: &[u8],
@@ -57,8 +67,12 @@ pub(crate) fn solve_raw(
     let mut response_buf: *mut u8 = ptr::null_mut();
     let mut response_len: i32 = 0;
 
-    // SAFETY: All pointers are valid for the duration of the call.
-    // The C API allocates the response buffer which we must free.
+    // SAFETY: `model_bytes.as_ptr()` is valid for reading `model_len` bytes
+    // (bounds-checked by `usize_to_i32`). `params_ptr` is valid for reading
+    // `params_len` bytes when `Some`, or null with length `0` when `None`.
+    // `response_buf` and `response_len` are valid stack-local out-pointers
+    // created via `ptr::addr_of_mut!`, and OR-Tools does not retain any input
+    // pointer after returning.
     unsafe {
         SolveCpModelWithParameters(
             model_bytes.as_ptr(),
@@ -70,28 +84,49 @@ pub(crate) fn solve_raw(
         );
     }
 
+    let _response_guard = MallocGuard(response_buf);
     if response_buf.is_null() {
         return Err(SolveError::FfiError(-1));
     }
 
-    // SAFETY: OR-Tools allocated response_buf with malloc, length is response_len.
-    // We copy into a Vec immediately and free the buffer.
-    // A response_len of 0 is valid (empty protobuf message).
-    let response = unsafe {
-        let len = if response_len >= 0 {
-            response_len as usize
-        } else {
-            0
-        };
-        let owned = if len > 0 {
-            let slice = std::slice::from_raw_parts(response_buf, len);
-            slice.to_vec()
-        } else {
-            Vec::new()
-        };
-        free(response_buf.cast::<std::ffi::c_void>());
-        owned
-    };
+    let len = response_len_to_usize(response_len)?;
+    if len == 0 {
+        return Ok(Vec::new());
+    }
 
-    Ok(response)
+    // SAFETY: `response_buf` is non-null (checked above), `len > 0` and
+    // `len <= i32::MAX <= isize::MAX` (validated by `response_len_to_usize`),
+    // OR-Tools populated `len` initialized `u8` bytes in the `malloc` buffer,
+    // and `_response_guard` keeps the buffer live until `to_vec()` completes.
+    let slice = unsafe { std::slice::from_raw_parts(response_buf, len) };
+    Ok(slice.to_vec())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn negative_response_len_returns_ffi_error() {
+        assert!(matches!(
+            response_len_to_usize(-1),
+            Err(SolveError::FfiError(-1))
+        ));
+        assert!(matches!(
+            response_len_to_usize(i32::MIN),
+            Err(SolveError::FfiError(i32::MIN))
+        ));
+        assert_eq!(response_len_to_usize(0).unwrap(), 0);
+        assert_eq!(response_len_to_usize(42).unwrap(), 42);
+    }
+
+    #[test]
+    fn usize_to_i32_overflow_returns_model_too_large() {
+        let too_large = usize::try_from(i32::MAX).unwrap() + 1;
+        assert!(matches!(
+            usize_to_i32(too_large),
+            Err(SolveError::ModelTooLarge(v)) if v == too_large
+        ));
+        assert_eq!(usize_to_i32(128).unwrap(), 128);
+    }
 }

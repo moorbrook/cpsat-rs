@@ -7,7 +7,7 @@
 use cpsat_rs::prelude::*;
 
 /// Verify that interval linking (start + size == end) is actually enforced.
-/// If new_interval_var dropped the linking constraint, the solver could
+/// If `new_interval_var` dropped the linking constraint, the solver could
 /// return intervals where end != start + size.
 #[test]
 fn interval_linking_is_enforced() {
@@ -37,8 +37,8 @@ fn interval_linking_is_enforced() {
     assert_eq!(ev, 10, "End should be 10");
 }
 
-/// Verify that add_no_overlap actually prevents overlap.
-/// If add_no_overlap was a no-op, tasks could be scheduled at the same time.
+/// Verify that `add_no_overlap` actually prevents overlap.
+/// If `add_no_overlap` was a no-op, tasks could be scheduled at the same time.
 #[test]
 fn no_overlap_actually_prevents_overlap() {
     let mut model = CpModel::new();

@@ -1,14 +1,15 @@
-//! # cpsat-rs — Rust bindings for Google OR-Tools CP-SAT solver.
+//! # `cpsat-rs` — Rust bindings for Google OR-Tools CP-SAT solver.
 //!
-//! Build constraint programming models in safe Rust, solve with the full
-//! power of OR-Tools CP-SAT (CDCL, LP relaxation, LNS, FeasibilityJump).
+//! Build constraint programming models in Rust and solve them with OR-Tools
+//! CP-SAT (CDCL, LP relaxation, LNS, `FeasibilityJump`).
 //!
 //! ## Architecture
 //!
-//! All model construction happens in pure safe Rust. The only FFI call
-//! is a single `extern "C"` function that passes serialized protobuf
-//! bytes to OR-Tools and receives response bytes back. Zero C++ object
-//! lifetime management.
+//! Model construction happens in Rust using prost-generated protobuf types.
+//! Solving delegates through `src/ffi.rs` (`extern "C"` call to
+//! `SolveCpModelWithParameters`) with serialized protobuf request/response
+//! buffers and an RAII `free` drop guard, with zero C++ object lifetime
+//! management across FFI.
 //!
 //! ## Quick Start
 //!
@@ -34,18 +35,6 @@
 //! brew install or-tools  # macOS
 //! ```
 
-#![deny(unsafe_op_in_unsafe_fn)]
-#![warn(clippy::pedantic)]
-#![allow(clippy::must_use_candidate)]
-#![allow(clippy::return_self_not_must_use)]
-#![allow(clippy::module_name_repetitions)]
-#![allow(clippy::cast_possible_truncation)]
-#![allow(clippy::cast_sign_loss)]
-#![allow(clippy::cast_possible_wrap)]
-#![allow(clippy::cast_precision_loss)]
-#![allow(clippy::doc_markdown)]
-#![allow(clippy::similar_names)]
-
 pub mod error;
 pub mod expressions;
 mod ffi;
@@ -67,4 +56,23 @@ pub mod prelude {
     pub use crate::proto::{CpSolverStatus, SatParameters};
     pub use crate::solver::{CpSolver, SolveResponse};
     pub use crate::vars::{BoolVar, IntVar, IntervalVar};
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::prelude::*;
+
+    const fn assert_send_sync<T: Send + Sync>() {}
+
+    #[test]
+    fn public_types_are_send_and_sync() {
+        assert_send_sync::<CpModel>();
+        assert_send_sync::<SolveResponse>();
+        assert_send_sync::<SolveError>();
+        assert_send_sync::<IntVar>();
+        assert_send_sync::<BoolVar>();
+        assert_send_sync::<IntervalVar>();
+        assert_send_sync::<LinearExpr>();
+        assert_send_sync::<BoundedLinearExpr>();
+    }
 }

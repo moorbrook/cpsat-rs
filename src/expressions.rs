@@ -3,7 +3,7 @@
 use crate::vars::{BoolVar, IntVar};
 use std::ops::{Add, Mul, Neg, Sub};
 
-/// A linear expression: sum(coeff_i * var_i) + constant.
+/// A linear expression: `sum(coeff_i * var_i) + constant`.
 #[derive(Debug, Clone, Default)]
 #[must_use]
 pub struct LinearExpr {
@@ -56,7 +56,7 @@ impl LinearExpr {
         self.terms.push((var, coeff));
     }
 
-    /// Constrain this expression to be <= upper_bound.
+    /// Constrain this expression to be `<= ub`.
     pub fn le(self, ub: i64) -> BoundedLinearExpr {
         BoundedLinearExpr {
             expr: self,
@@ -65,7 +65,7 @@ impl LinearExpr {
         }
     }
 
-    /// Constrain this expression to be >= lower_bound.
+    /// Constrain this expression to be `>= lb`.
     pub fn ge(self, lb: i64) -> BoundedLinearExpr {
         BoundedLinearExpr {
             expr: self,

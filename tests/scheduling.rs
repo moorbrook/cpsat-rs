@@ -28,6 +28,13 @@ fn two_tasks_one_machine() {
 /// FT06: Fisher-Thompson 6x6, optimal makespan = 55.
 #[test]
 fn ft06_job_shop() {
+    #[allow(dead_code)] // `interval` is held to keep the IntervalVar alive in the model
+    struct OpVar {
+        start: IntVar,
+        end: IntVar,
+        interval: IntervalVar,
+    }
+
     let jobs: Vec<Vec<(usize, i64)>> = vec![
         vec![(2, 1), (0, 3), (1, 6), (3, 7), (5, 3), (4, 6)],
         vec![(1, 8), (2, 5), (4, 10), (5, 10), (0, 10), (3, 4)],
@@ -41,22 +48,16 @@ fn ft06_job_shop() {
 
     let mut model = CpModel::new();
 
-    #[allow(dead_code)] // `interval` is held to keep the IntervalVar alive in the model
-    struct OpVar {
-        start: IntVar,
-        end: IntVar,
-        interval: IntervalVar,
-    }
     let mut ops: Vec<Vec<OpVar>> = Vec::new();
     let mut machine_intervals: Vec<Vec<IntervalVar>> = vec![vec![]; n_machines];
 
     for (j, job) in jobs.iter().enumerate() {
         let mut job_ops = Vec::new();
         for (op, &(machine, dur)) in job.iter().enumerate() {
-            let name = format!("j{}o{}", j, op);
-            let s = model.new_int_var(0..=horizon, format!("s_{}", name));
+            let name = format!("j{j}o{op}");
+            let s = model.new_int_var(0..=horizon, format!("s_{name}"));
             let d = model.new_constant(dur);
-            let e = model.new_int_var(0..=horizon, format!("e_{}", name));
+            let e = model.new_int_var(0..=horizon, format!("e_{name}"));
             let iv = model.new_interval_var(s, d, e, &name);
             machine_intervals[machine].push(iv);
             job_ops.push(OpVar {
@@ -85,7 +86,10 @@ fn ft06_job_shop() {
 
     // Makespan = max(all end times)
     let makespan = model.new_int_var(0..=horizon, "makespan");
-    let all_ends: Vec<IntVar> = ops.iter().flat_map(|j| j.last().map(|op| op.end)).collect();
+    let all_ends: Vec<IntVar> = ops
+        .iter()
+        .filter_map(|j| j.last().map(|op| op.end))
+        .collect();
     model.add_max_equality(makespan, &all_ends);
     model.minimize(makespan);
 

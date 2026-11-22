@@ -1,13 +1,13 @@
-//! CpModel builder — the main entry point for constructing optimization models.
+//! `CpModel` builder — the main entry point for constructing optimization models.
 
 use crate::expressions::{BoundedLinearExpr, LinearExpr};
 use crate::proto::{
-    constraint_proto, AllDifferentConstraintProto, AutomatonConstraintProto, BoolArgumentProto,
+    AllDifferentConstraintProto, AutomatonConstraintProto, BoolArgumentProto,
     CircuitConstraintProto, ConstraintProto, CpModelProto, CpObjectiveProto,
     CumulativeConstraintProto, ElementConstraintProto, IntegerVariableProto,
     IntervalConstraintProto, LinearArgumentProto, LinearConstraintProto, LinearExpressionProto,
     NoOverlap2DConstraintProto, NoOverlapConstraintProto, PartialVariableAssignment,
-    TableConstraintProto,
+    TableConstraintProto, constraint_proto,
 };
 use crate::vars::{BoolVar, IntVar, IntervalVar};
 use prost::Message;
@@ -15,7 +15,7 @@ use prost::Message;
 /// Domain specification for integer variables.
 pub trait IntoDomain {
     /// Convert to the flat domain representation used by CP-SAT proto.
-    /// Format: pairs of [lb, ub] intervals, flattened into a single Vec.
+    /// Format: pairs of `[lb, ub]` intervals, flattened into a single `Vec`.
     fn into_domain(self) -> Vec<i64>;
 }
 
@@ -71,7 +71,7 @@ impl IntoDomain for Vec<(i64, i64)> {
         // for all i < n-1: max_i + 1 < min_{i+1}
         for w in self.windows(2) {
             assert!(
-                w[0].1 + 1 < w[1].0,
+                w[0].1.checked_add(1).is_some_and(|next| next < w[1].0),
                 "Domain intervals ({}, {}) and ({}, {}) are not sorted/disjoint/non-adjacent \
                  (require max + 1 < next_min)",
                 w[0].0,
@@ -111,16 +111,9 @@ impl IntoDomain for std::ops::RangeInclusive<i32> {
 /// model.minimize(x + y);
 /// let response = CpSolver::solve(&model).unwrap();
 /// ```
+#[derive(Clone)]
 pub struct CpModel {
     pub(crate) proto: CpModelProto,
-}
-
-impl Clone for CpModel {
-    fn clone(&self) -> Self {
-        Self {
-            proto: self.proto.clone(),
-        }
-    }
 }
 
 impl CpModel {
@@ -131,16 +124,26 @@ impl CpModel {
         }
     }
 
+    fn next_var_index(&self) -> i32 {
+        i32::try_from(self.proto.variables.len()).expect("CpModel variable count exceeds i32::MAX")
+    }
+
+    fn next_constraint_index(&self) -> i32 {
+        i32::try_from(self.proto.constraints.len())
+            .expect("CpModel constraint count exceeds i32::MAX")
+    }
+
     // ───── Variable creation ─────
 
     /// Add an integer variable with the given domain.
     ///
     /// # Panics
     ///
-    /// Panics if the domain is invalid (empty range, lb > ub, or
-    /// non-sorted/non-disjoint intervals for `Vec<(i64, i64)>`).
+    /// Panics if the domain is invalid (empty range, `lb > ub`, or
+    /// non-sorted/non-disjoint intervals for `Vec<(i64, i64)>`), or if the
+    /// variable count exceeds `i32::MAX`.
     pub fn new_int_var(&mut self, domain: impl IntoDomain, name: impl AsRef<str>) -> IntVar {
-        let idx = self.proto.variables.len() as i32;
+        let idx = self.next_var_index();
         self.proto.variables.push(IntegerVariableProto {
             name: name.as_ref().to_string(),
             domain: domain.into_domain(),
@@ -148,9 +151,13 @@ impl CpModel {
         IntVar(idx)
     }
 
-    /// Add a Boolean variable (domain [0, 1]).
+    /// Add a Boolean variable (domain `[0, 1]`).
+    ///
+    /// # Panics
+    ///
+    /// Panics if the variable count exceeds `i32::MAX`.
     pub fn new_bool_var(&mut self, name: impl AsRef<str>) -> BoolVar {
-        let idx = self.proto.variables.len() as i32;
+        let idx = self.next_var_index();
         self.proto.variables.push(IntegerVariableProto {
             name: name.as_ref().to_string(),
             domain: vec![0, 1],
@@ -159,8 +166,12 @@ impl CpModel {
     }
 
     /// Add a constant variable.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the variable count exceeds `i32::MAX`.
     pub fn new_constant(&mut self, value: i64) -> IntVar {
-        let idx = self.proto.variables.len() as i32;
+        let idx = self.next_var_index();
         self.proto.variables.push(IntegerVariableProto {
             name: String::new(),
             domain: vec![value, value],
@@ -175,7 +186,8 @@ impl CpModel {
     ///
     /// # Panics
     ///
-    /// Panics if coefficient arithmetic overflows i64 during constraint generation.
+    /// Panics if coefficient arithmetic overflows `i64` during constraint generation
+    /// or if the constraint count exceeds `i32::MAX`.
     pub fn new_interval_var(
         &mut self,
         start: impl Into<LinearExpr>,
@@ -187,7 +199,7 @@ impl CpModel {
         let size_expr = size.into();
         let end_expr = end.into();
 
-        let idx = self.proto.constraints.len() as i32;
+        let idx = self.next_constraint_index();
         self.proto.constraints.push(ConstraintProto {
             name: name.as_ref().to_string(),
             enforcement_literal: vec![],
@@ -213,6 +225,11 @@ impl CpModel {
     ///
     /// Automatically adds the required `is_present => start + size == end` and
     /// `is_present => size >= 0` constraints.
+    ///
+    /// # Panics
+    ///
+    /// Panics if coefficient arithmetic overflows `i64` during constraint generation
+    /// or if the constraint count exceeds `i32::MAX`.
     pub fn new_optional_interval_var(
         &mut self,
         start: impl Into<LinearExpr>,
@@ -226,7 +243,7 @@ impl CpModel {
         let end_expr = end.into();
         let enforcement = vec![is_present.index()];
 
-        let idx = self.proto.constraints.len() as i32;
+        let idx = self.next_constraint_index();
         self.proto.constraints.push(ConstraintProto {
             name: name.as_ref().to_string(),
             enforcement_literal: enforcement.clone(),
@@ -280,7 +297,9 @@ impl CpModel {
             .checked_add(size.constant)
             .and_then(|v| v.checked_sub(end.constant))
             .expect("Interval linking: constant overflow in start + size - end");
-        let neg_offset = offset.saturating_neg();
+        let neg_offset = offset
+            .checked_neg()
+            .expect("Interval linking: offset overflow on negation");
 
         self.proto.constraints.push(ConstraintProto {
             name: String::new(),
@@ -327,16 +346,16 @@ impl CpModel {
 
     // ───── Constraints ─────
 
-    /// Add a bounded linear constraint: lb <= expr <= ub.
+    /// Add a bounded linear constraint: `lb <= expr <= ub`.
     ///
     /// # Panics
     ///
-    /// Panics if adjusting bounds by the expression constant overflows i64.
+    /// Panics if adjusting bounds by the expression constant overflows `i64`.
     pub fn add(&mut self, bounded: BoundedLinearExpr) -> &mut Self {
         let expr = bounded.expr;
         // Move constant to the bound side: sum(c*v) + k in [lb, ub]
         // becomes sum(c*v) in [lb - k, ub - k]
-        let adj_lb = if bounded.lb == i64::MIN {
+        let adjusted_lower = if bounded.lb == i64::MIN {
             i64::MIN
         } else {
             bounded.lb.checked_sub(expr.constant).unwrap_or_else(|| {
@@ -346,7 +365,7 @@ impl CpModel {
                 )
             })
         };
-        let adj_ub = if bounded.ub == i64::MAX {
+        let adjusted_upper = if bounded.ub == i64::MAX {
             i64::MAX
         } else {
             bounded.ub.checked_sub(expr.constant).unwrap_or_else(|| {
@@ -364,7 +383,7 @@ impl CpModel {
                 LinearConstraintProto {
                     vars: expr.terms.iter().map(|(v, _)| v.0).collect(),
                     coeffs: expr.terms.iter().map(|(_, c)| *c).collect(),
-                    domain: vec![adj_lb, adj_ub],
+                    domain: vec![adjusted_lower, adjusted_upper],
                 },
             )),
         });
@@ -406,8 +425,9 @@ impl CpModel {
         self
     }
 
-    /// 2D no-overlap: x_intervals[i] and y_intervals[i] define rectangles
+    /// 2D no-overlap: `x_intervals[i]` and `y_intervals[i]` define rectangles
     /// that must not overlap.
+    ///
     /// # Panics
     ///
     /// Panics if `x_intervals` and `y_intervals` have different lengths.
@@ -438,6 +458,7 @@ impl CpModel {
 
     /// Cumulative constraint: at any point in time, the sum of demands
     /// of active intervals must not exceed capacity.
+    ///
     /// # Panics
     ///
     /// Panics if `intervals` and `demands` have different lengths.
@@ -469,18 +490,16 @@ impl CpModel {
     }
 
     /// Circuit constraint: find a Hamiltonian circuit.
-    /// Each arc is (tail_node, head_node, literal).
+    /// Each arc is `(tail_node, head_node, literal)`.
     pub fn add_circuit(&mut self, arcs: &[(i32, i32, BoolVar)]) -> &mut Self {
-        let (tails, heads, literals): (Vec<_>, Vec<_>, Vec<_>) =
-            arcs.iter().map(|&(t, h, l)| (t, h, l.index())).fold(
-                (vec![], vec![], vec![]),
-                |(mut t, mut h, mut l), (ti, hi, li)| {
-                    t.push(ti);
-                    h.push(hi);
-                    l.push(li);
-                    (t, h, l)
-                },
-            );
+        let mut tails = Vec::with_capacity(arcs.len());
+        let mut heads = Vec::with_capacity(arcs.len());
+        let mut literals = Vec::with_capacity(arcs.len());
+        for &(t, h, l) in arcs {
+            tails.push(t);
+            heads.push(h);
+            literals.push(l.index());
+        }
         self.proto.constraints.push(ConstraintProto {
             name: String::new(),
             enforcement_literal: vec![],
@@ -495,7 +514,8 @@ impl CpModel {
         self
     }
 
-    /// Table constraint: vars must take one of the allowed tuples.
+    /// Table constraint: `vars` must take one of the allowed tuples.
+    ///
     /// # Panics
     ///
     /// Panics if any tuple has a different length than `vars`.
@@ -533,18 +553,14 @@ impl CpModel {
         final_states: &[i64],
         transitions: &[(i64, i64, i64)],
     ) -> &mut Self {
-        let (tails, heads, labels): (Vec<_>, Vec<_>, Vec<_>) = transitions
-            .iter()
-            .map(|&(tail, head, label)| (tail, head, label))
-            .fold(
-                (vec![], vec![], vec![]),
-                |(mut t, mut h, mut l), (ti, hi, li)| {
-                    t.push(ti);
-                    h.push(hi);
-                    l.push(li);
-                    (t, h, l)
-                },
-            );
+        let mut tails = Vec::with_capacity(transitions.len());
+        let mut heads = Vec::with_capacity(transitions.len());
+        let mut labels = Vec::with_capacity(transitions.len());
+        for &(tail, head, label) in transitions {
+            tails.push(tail);
+            heads.push(head);
+            labels.push(label);
+        }
         self.proto.constraints.push(ConstraintProto {
             name: String::new(),
             enforcement_literal: vec![],
@@ -563,7 +579,7 @@ impl CpModel {
         self
     }
 
-    /// Element constraint: target == array[index].
+    /// Element constraint: `target == array[index]`.
     ///
     /// # Panics
     ///
@@ -653,7 +669,7 @@ impl CpModel {
         self
     }
 
-    /// Implication: if a is true then b must be true.
+    /// Implication: if `a` is true then `b` must be true.
     pub fn add_implication(&mut self, a: BoolVar, b: BoolVar) -> &mut Self {
         // Encoded as: a => b  ≡  ¬a ∨ b
         self.proto.constraints.push(ConstraintProto {
@@ -666,7 +682,7 @@ impl CpModel {
         self
     }
 
-    /// Max constraint: target == max(vars).
+    /// Max constraint: `target == max(vars)`.
     pub fn add_max_equality(&mut self, target: IntVar, vars: &[IntVar]) -> &mut Self {
         self.proto.constraints.push(ConstraintProto {
             name: String::new(),
@@ -690,7 +706,7 @@ impl CpModel {
         self
     }
 
-    /// Min constraint: target == min(vars).
+    /// Min constraint: `target == min(vars)`.
     pub fn add_min_equality(&mut self, target: IntVar, vars: &[IntVar]) -> &mut Self {
         // min(vars) = -max(-vars)
         self.proto.constraints.push(ConstraintProto {
@@ -718,6 +734,10 @@ impl CpModel {
     // ───── Objective ─────
 
     /// Minimize the given expression.
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "CP-SAT CpObjectiveProto.offset is f64"
+    )]
     pub fn minimize(&mut self, expr: impl Into<LinearExpr>) {
         let e = expr.into();
         self.proto.objective = Some(CpObjectiveProto {
@@ -738,6 +758,10 @@ impl CpModel {
     /// # Panics
     ///
     /// Panics if any coefficient is `i64::MIN` (cannot be negated).
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "CP-SAT CpObjectiveProto.offset is f64"
+    )]
     pub fn maximize(&mut self, expr: impl Into<LinearExpr>) {
         let e = expr.into();
         // Maximize f(x) = minimize -f(x)
@@ -797,16 +821,8 @@ impl CpModel {
     }
 
     /// Serialize the model to protobuf bytes.
-    ///
-    /// # Panics
-    ///
-    /// Cannot panic in practice — prost encode always succeeds on valid proto.
     pub fn to_bytes(&self) -> Vec<u8> {
-        let mut buf = Vec::with_capacity(self.proto.encoded_len());
-        self.proto
-            .encode(&mut buf)
-            .expect("prost encode cannot fail on valid proto");
-        buf
+        self.proto.encode_to_vec()
     }
 
     /// Deserialize a model from protobuf bytes.
@@ -842,5 +858,23 @@ impl std::fmt::Display for CpModel {
                 ""
             },
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[should_panic(expected = "not sorted/disjoint/non-adjacent")]
+    fn domain_i64_max_interval_panics() {
+        let _ = vec![(0, i64::MAX), (0, 1)].into_domain();
+    }
+
+    #[test]
+    #[should_panic(expected = "offset overflow")]
+    fn interval_linking_offset_i64_min_panics() {
+        let mut model = CpModel::new();
+        let _ = model.new_interval_var(i64::MIN, 0, 0, "overflow");
     }
 }

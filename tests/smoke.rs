@@ -30,7 +30,7 @@ fn infeasible_model() {
 fn all_different() {
     let mut model = CpModel::new();
     let vars: Vec<IntVar> = (0..4)
-        .map(|i| model.new_int_var(1..=4, format!("x{}", i)))
+        .map(|i| model.new_int_var(1..=4, format!("x{i}")))
         .collect();
     model.add_all_different(&vars);
     model.minimize(LinearExpr::sum(&vars));

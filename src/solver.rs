@@ -44,7 +44,7 @@ pub struct SolveResponse {
 }
 
 impl SolveResponse {
-    /// Solver status (Optimal, Feasible, Infeasible, Unknown, ModelInvalid).
+    /// Solver status (`Optimal`, `Feasible`, `Infeasible`, `Unknown`, `ModelInvalid`).
     pub fn status(&self) -> CpSolverStatus {
         self.proto.status()
     }
@@ -77,6 +77,17 @@ impl SolveResponse {
         self.proto.wall_time
     }
 
+    fn solution_at(&self, raw_index: i32) -> i64 {
+        let idx = usize::try_from(raw_index)
+            .unwrap_or_else(|_| panic!("Variable index {raw_index} must be non-negative"));
+        *self.proto.solution.get(idx).unwrap_or_else(|| {
+            panic!(
+                "Variable index {raw_index} out of bounds (solution has {} values)",
+                self.proto.solution.len()
+            )
+        })
+    }
+
     /// Get the value of an integer variable in the solution.
     ///
     /// # Panics
@@ -89,13 +100,7 @@ impl SolveResponse {
             "Cannot read solution values: status is {:?}",
             self.status()
         );
-        assert!(
-            (var.index() as usize) < self.proto.solution.len(),
-            "Variable index {} out of bounds (solution has {} values)",
-            var.index(),
-            self.proto.solution.len()
-        );
-        self.proto.solution[var.index() as usize]
+        self.solution_at(var.index())
     }
 
     /// Get the value of a Boolean variable in the solution.
@@ -115,10 +120,10 @@ impl SolveResponse {
             "Cannot read negated BoolVar value directly. \
              Use the non-negated variable."
         );
-        self.proto.solution[var.index() as usize] != 0
+        self.solution_at(var.index()) != 0
     }
 
-    /// Assumptions sufficient for infeasibility (when status is Infeasible
+    /// Assumptions sufficient for infeasibility (when status is `Infeasible`
     /// and assumptions were provided).
     pub fn sufficient_assumptions_for_infeasibility(&self) -> &[i32] {
         &self.proto.sufficient_assumptions_for_infeasibility

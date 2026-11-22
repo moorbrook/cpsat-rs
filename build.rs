@@ -37,6 +37,7 @@ fn main() {
                 "/usr",
                 "/usr/local",
                 // Custom install
+                "/opt/or-tools",
                 "/opt/ortools",
             ];
             for path in &candidates {

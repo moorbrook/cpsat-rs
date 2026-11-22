@@ -4,6 +4,12 @@
 
 use cpsat_rs::prelude::*;
 
+struct OpVar {
+    start: IntVar,
+    end: IntVar,
+    _interval: IntervalVar,
+}
+
 fn main() {
     // Each job is a list of (machine, processing_time) operations.
     let jobs: Vec<Vec<(usize, i64)>> = vec![
@@ -20,11 +26,6 @@ fn main() {
     let mut model = CpModel::new();
 
     // Create interval variables for each operation.
-    struct OpVar {
-        start: IntVar,
-        end: IntVar,
-        _interval: IntervalVar,
-    }
     let mut ops: Vec<Vec<OpVar>> = Vec::new();
     let mut machine_intervals: Vec<Vec<IntervalVar>> = vec![vec![]; n_machines];
 
